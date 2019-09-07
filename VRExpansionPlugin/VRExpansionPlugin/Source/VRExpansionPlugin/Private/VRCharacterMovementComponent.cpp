@@ -384,8 +384,8 @@ void FSavedMove_VRCharacter::SetInitialPosition(ACharacter* C)
 		UVRCharacterMovementComponent * CharMove = Cast<UVRCharacterMovementComponent>(VRC->GetCharacterMovement());
 		if (VRC->VRRootReference)
 		{
-			VRCapsuleLocation = VRC->VRRootReference->curCameraLoc;
-			VRCapsuleRotation = UVRExpansionFunctionLibrary::GetHMDPureYaw_I(VRC->VRRootReference->curCameraRot);
+			VRCapsuleLocation = VRC->VRRootReference->CurrentCameraLocation;
+			VRCapsuleRotation = UVRExpansionFunctionLibrary::GetHMDPureYaw_I(VRC->VRRootReference->CurrentCameraRotation);
 			LFDiff = VRC->VRRootReference->DifferenceFromLastFrame;
 		}
 		else
@@ -407,8 +407,8 @@ void FSavedMove_VRCharacter::PrepMoveFor(ACharacter* Character)
 	// I am overriding the replicated value here when movement is made on purpose
 	if (CharMove && CharMove->VRRootCapsule)
 	{
-		CharMove->VRRootCapsule->curCameraLoc = this->VRCapsuleLocation;
-		CharMove->VRRootCapsule->curCameraRot = this->VRCapsuleRotation;//FRotator(0.0f, FRotator::DecompressAxisFromByte(CapsuleYaw), 0.0f);
+		CharMove->VRRootCapsule->CurrentCameraLocation = this->VRCapsuleLocation;
+		CharMove->VRRootCapsule->CurrentCameraRotation = this->VRCapsuleRotation;//FRotator(0.0f, FRotator::DecompressAxisFromByte(CapsuleYaw), 0.0f);
 		CharMove->VRRootCapsule->DifferenceFromLastFrame = FVector(LFDiff.X, LFDiff.Y, 0.0f);
 		CharMove->AdditionalVRInputVector = CharMove->VRRootCapsule->DifferenceFromLastFrame;
 
@@ -735,8 +735,8 @@ void UVRCharacterMovementComponent::ServerMoveVR_Implementation(
 		// I am overriding the replicated value here when movement is made on purpose
 		if (VRRootCapsule)
 		{
-			VRRootCapsule->curCameraLoc = CapsuleLoc;
-			VRRootCapsule->curCameraRot = FRotator(0.0f, FRotator::DecompressAxisFromShort(CapsuleYaw), 0.0f);
+			VRRootCapsule->CurrentCameraLocation = CapsuleLoc;
+			VRRootCapsule->CurrentCameraRotation = FRotator(0.0f, FRotator::DecompressAxisFromShort(CapsuleYaw), 0.0f);
 			VRRootCapsule->DifferenceFromLastFrame = FVector(LFDiff.X, LFDiff.Y, 0.0f);
 			AdditionalVRInputVector = VRRootCapsule->DifferenceFromLastFrame;
 		
@@ -2527,7 +2527,7 @@ void UVRCharacterMovementComponent::FindFloor(const FVector& CapsuleLocation, FF
 
 	// #TODO: Modify the floor compute floor distance instead? Or just run movement logic differently for the bWalkingCollisionOverride setup.
 	// #VR Specific - ignore floor traces that are negative, this can be caused by a failed floor check while starting in penetration
-	if (VRRootCapsule && VRRootCapsule->bUseWalkingCollisionOverride && OutFloorResult.bBlockingHit && OutFloorResult.FloorDist <= 0.0f)
+	if (VRRootCapsule && VRRootCapsule->BUseWalkingCollisionOverride && OutFloorResult.bBlockingHit && OutFloorResult.FloorDist <= 0.0f)
 	{ 
 
 		if (OutFloorResult.FloorDist <= -FMath::Max(MAX_FLOOR_DIST, CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()))
@@ -4383,7 +4383,7 @@ FVector UVRCharacterMovementComponent::GetPenetrationAdjustment(const FHitResult
 {
 	// This checks for a walking collision override on the penetrated object
 	// If found then it stops penetration adjustments.
-	if (MovementMode == EMovementMode::MOVE_Walking && VRRootCapsule && VRRootCapsule->bUseWalkingCollisionOverride && Hit.Component.IsValid())
+	if (MovementMode == EMovementMode::MOVE_Walking && VRRootCapsule && VRRootCapsule->BUseWalkingCollisionOverride && Hit.Component.IsValid())
 	{
 		ECollisionResponse WalkingResponse;
 		WalkingResponse = Hit.Component->GetCollisionResponseToChannel(VRRootCapsule->WalkingCollisionOverride);

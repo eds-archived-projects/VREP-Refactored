@@ -1,141 +1,159 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+// Parent Header
 #include "VRBPDataTypes.h"
 
-namespace VRDataTypeCVARs
+
+
+// FBPVRWaistTracking_Info \\\\\\\\\\\\\\\\
+
+// Public
+
+// Functions
+
+bool FBPVRWaistTracking_Info::IsValid()
 {
-	// Doing it this way because I want as little rep and perf impact as possible and sampling a static var is that.
-	// This is to specifically help out very rare cases, DON'T USE THIS UNLESS YOU HAVE NO CHOICE
-	static int32 RepHighPrecisionTransforms = 0;
-	FAutoConsoleVariableRef CVarRepHighPrecisionTransforms(
-		TEXT("vrexp.RepHighPrecisionTransforms"),
-		RepHighPrecisionTransforms,
-		TEXT("When on, will rep Quantized transforms at full precision, WARNING use at own risk, if this isn't the same setting client & server then it will crash.\n")
-		TEXT("0: Disable, 1: Enable"),
-		ECVF_Default);
+	return TrackedDevice != nullptr;
 }
 
-bool FTransform_NetQuantize::NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
+void FBPVRWaistTracking_Info::Clear()
+{
+	TrackedDevice = nullptr;
+}
+
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+// FBPVRComponentPosRep \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+// Public
+
+// Functions
+
+/** 
+Network serialization 
+
+Doing a custom NetSerialize here because this is sent via RPCs and should change on every update.
+*/
+bool FBPVRComponentPosRep::NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
 {
 	bOutSuccess = true;
 
-	FVector rTranslation;
-	FVector rScale3D;
-	//FQuat rRotation;
-	FRotator rRotation;
+	/* 
+	Defines the level of Quantization.
+
+	uint8 Flags = (uint8)QuantizationLevel;
+	*/
+	Ar.SerializeBits(&QuantizationLevel        , 1); // Only two values 0:1
+	Ar.SerializeBits(&RotationQuantizationLevel, 1); // Only two values 0:1
+
+	/*
+	No longer using their built in rotation rep, as controllers will rarely if ever be at 0 rot on an axis and 
+	so the 1 bit overhead per axis is just that, overhead.
+	*/
+	//Rotation.SerializeCompressedShort(Ar);
 
 	uint16 ShortPitch = 0;
-	uint16 ShortYaw = 0;
-	uint16 ShortRoll = 0;
+	uint16 ShortYaw   = 0;
+	uint16 ShortRoll  = 0;
 
-	bool bUseHighPrecision = VRDataTypeCVARs::RepHighPrecisionTransforms > 0;
-
+	/**
+	*	Valid range 100: 2^22 / 100 = +/- 41,943.04 (419.43 meters)
+	*	Valid range 10: 2^18 / 10 = +/- 26,214.4 (262.144 meters)
+	*	Pos rep is assumed to be in relative space for a tracked component, these numbers should be fine
+	*/
 	if (Ar.IsSaving())
 	{
-		// Because transforms can be vectorized or not, need to use the inline retrievers
-		rTranslation = this->GetTranslation();
-		rScale3D = this->GetScale3D();
-		rRotation = this->Rotator();//this->GetRotation();
-
-		if (bUseHighPrecision)
+		switch (QuantizationLevel)
 		{
-			Ar << rTranslation;
-			Ar << rScale3D;
-			Ar << rRotation;
+		case EVRVectorQuantization::RoundTwoDecimals: 
+		{
+			bOutSuccess &= SerializePackedVector<100, 22/*30*/>(Position, Ar); 
+			
+			break;
 		}
-		else
+		case EVRVectorQuantization::RoundOneDecimal: 
 		{
-			// Translation set to 2 decimal precision
-			bOutSuccess &= SerializePackedVector<100, 30>(rTranslation, Ar);
-
-			// Scale set to 2 decimal precision, had it 1 but realized that I used two already even
-			bOutSuccess &= SerializePackedVector<100, 30>(rScale3D, Ar);
-
-			// Rotation converted to FRotator and short compressed, see below for conversion reason
-			// FRotator already serializes compressed short by default but I can save a func call here
-			rRotation.SerializeCompressedShort(Ar);
+			bOutSuccess &= SerializePackedVector<10, 18/*24*/>(Position, Ar); 
+			
+			break;
+		}
 		}
 
+		switch (RotationQuantizationLevel)
+		{
+		case EVRRotationQuantization::RoundTo10Bits:
+		{
+			ShortPitch = CompressAxisTo10BitShort(Rotation.Pitch);
+			ShortYaw   = CompressAxisTo10BitShort(Rotation.Yaw  );
+			ShortRoll  = CompressAxisTo10BitShort(Rotation.Roll );
 
-		//Ar << rRotation;
+			Ar.SerializeBits(&ShortPitch, 10);
+			Ar.SerializeBits(&ShortYaw  , 10);
+			Ar.SerializeBits(&ShortRoll , 10);
 
-		// If I converted it to a rotator and serialized as shorts I would save 6 bytes.
-		// I am unsure about a safe method of compressed serializing a quat, though I read through smallest three
-		// Epic already drops W from the Quat and reconstructs it after the send.
-		// Converting to rotator first may have conversion issues and has a perf cost....needs testing, epic attempts to handle
-		// Singularities in their conversion but I haven't tested it in all circumstances
-		//rRotation.SerializeCompressedShort(Ar);
+			break;
+		}
+		case EVRRotationQuantization::RoundToShort:
+		{
+			ShortPitch = FRotator::CompressAxisToShort(Rotation.Pitch);
+			ShortYaw   = FRotator::CompressAxisToShort(Rotation.Yaw  );
+			ShortRoll  = FRotator::CompressAxisToShort(Rotation.Roll );
+
+			Ar << ShortPitch;
+			Ar << ShortYaw  ;
+			Ar << ShortRoll ;
+		}break;
+		}
 	}
-	else // If loading
+	else   // If loading
 	{
+		//QuantizationLevel = (EVRVectorQuantization)Flags;
 
-		if (bUseHighPrecision)
+		switch (QuantizationLevel)
 		{
-			Ar << rTranslation;
-			Ar << rScale3D;
-			Ar << rRotation;
-		}
-		else
+		case EVRVectorQuantization::RoundTwoDecimals: 
 		{
-			bOutSuccess &= SerializePackedVector<100, 30>(rTranslation, Ar);
-			bOutSuccess &= SerializePackedVector<100, 30>(rScale3D, Ar);
-			rRotation.SerializeCompressedShort(Ar);
+			bOutSuccess &= SerializePackedVector<100, 22/*30*/>(Position, Ar);
+			
+			break;
+		}
+		case EVRVectorQuantization::RoundOneDecimal: 
+		{
+			bOutSuccess &= SerializePackedVector<10, 18/*24*/>(Position, Ar);
+
+			break;
+		}
 		}
 
-		//Ar << rRotation;
+		switch (RotationQuantizationLevel)
+		{
+		case EVRRotationQuantization::RoundTo10Bits:
+		{
+			Ar.SerializeBits(&ShortPitch, 10);
+			Ar.SerializeBits(&ShortYaw  , 10);
+			Ar.SerializeBits(&ShortRoll , 10);
 
-		// Set it
-		this->SetComponents(rRotation.Quaternion(), rTranslation, rScale3D);
+			Rotation.Pitch = DecompressAxisFrom10BitShort(ShortPitch);
+			Rotation.Yaw   = DecompressAxisFrom10BitShort(ShortYaw  );
+			Rotation.Roll  = DecompressAxisFrom10BitShort(ShortRoll );
+			break;
+		}
+		case EVRRotationQuantization::RoundToShort:
+		{
+			Ar << ShortPitch;
+			Ar << ShortYaw  ;
+			Ar << ShortRoll ;
+
+			Rotation.Pitch = FRotator::DecompressAxisFromShort(ShortPitch);
+			Rotation.Yaw   = FRotator::DecompressAxisFromShort(ShortYaw  );
+			Rotation.Roll  = FRotator::DecompressAxisFromShort(ShortRoll );
+
+			break;
+		}
+		}
 	}
 
 	return bOutSuccess;
 }
 
-// ** Euro Low Pass Filter ** //
-
-void FBPEuroLowPassFilter::ResetSmoothingFilter()
-{
-	RawFilter.bFirstTime = true;
-	DeltaFilter.bFirstTime = true;
-}
-
-FVector FBPEuroLowPassFilter::RunFilterSmoothing(const FVector &InRawValue, const float &InDeltaTime)
-{
-	// Calculate the delta, if this is the first time then there is no delta
-	const FVector Delta = RawFilter.bFirstTime == true ? FVector::ZeroVector : (InRawValue - RawFilter.Previous) * InDeltaTime;
-
-	// Filter the delta to get the estimated
-	const FVector Estimated = DeltaFilter.Filter(Delta, FVector(CalculateAlpha(DeltaCutoff, InDeltaTime)));
-
-	// Use the estimated to calculate the cutoff
-	const FVector Cutoff = CalculateCutoff(Estimated);
-
-	// Filter passed value 
-	return RawFilter.Filter(InRawValue, CalculateAlpha(Cutoff, InDeltaTime));
-}
-
-const FVector FBPEuroLowPassFilter::CalculateCutoff(const FVector& InValue)
-{
-	FVector Result;
-	for (int i = 0; i < 3; i++)
-	{
-		Result[i] = MinCutoff + CutoffSlope * FMath::Abs(InValue[i]);
-	}
-	return Result;
-}
-
-const FVector FBPEuroLowPassFilter::CalculateAlpha(const FVector& InCutoff, const double InDeltaTime) const
-{
-	FVector Result;
-	for (int i = 0; i < 3; i++)
-	{
-		Result[i] = CalculateAlpha(InCutoff[i], InDeltaTime);
-	}
-	return Result;
-}
-
-const float FBPEuroLowPassFilter::CalculateAlpha(const float InCutoff, const double InDeltaTime) const
-{
-	const float tau = 1.0 / (2 * PI * InCutoff);
-	return 1.0 / (1.0 + tau / InDeltaTime);
-}
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\

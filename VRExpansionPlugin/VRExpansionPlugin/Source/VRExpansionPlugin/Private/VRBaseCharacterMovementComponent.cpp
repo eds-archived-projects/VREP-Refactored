@@ -166,7 +166,7 @@ void UVRBaseCharacterMovementComponent::TickComponent(float DeltaTime, enum ELev
 	{
 		// If we didn't move the capsule, have it update itself here so the visual and physics representation is correct
 		// We do this specifically to avoid double calling into the render / physics threads.
-		if (!VRRoot->bCalledUpdateTransform)
+		if (!VRRoot->BCalledUpdateTransform)
 			VRRoot->OnUpdateTransform_Public(EUpdateTransformFlags::None, ETeleportType::None);
 	}
 

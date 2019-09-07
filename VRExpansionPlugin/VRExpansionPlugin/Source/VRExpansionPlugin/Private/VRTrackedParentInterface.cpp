@@ -6,6 +6,4 @@
  
 UVRTrackedParentInterface::UVRTrackedParentInterface(const class FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
-{
- 
-}
+{}

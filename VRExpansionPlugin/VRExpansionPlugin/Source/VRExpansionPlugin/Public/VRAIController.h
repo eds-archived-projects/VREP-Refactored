@@ -1,12 +1,18 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
+
+// Unreal
 #include "CoreMinimal.h"
-#include "VRBPDatatypes.h"
 #include "AIController.h"
+
+// VREP
+#include "VRBPDatatypes.h"
 #include "VRBaseCharacter.h"
 
+// UHeader Tool
 #include "VRAIController.generated.h"
+
 
 
 UCLASS()
@@ -15,6 +21,11 @@ class VREXPANSIONPLUGIN_API AVRAIController : public AAIController
 	GENERATED_BODY()
 
 public:
+
+	// Functions
+
+	// AAIController Overloads
+
 	virtual FVector GetFocalPointOnActor(const AActor *Actor) const override;
 
 	/**
@@ -29,10 +40,15 @@ public:
 };
 
 
+
 UCLASS()
 class AVRDetourCrowdAIController : public AVRAIController
 {
 	GENERATED_BODY()
+
 public:
+
+	// Constructor
+
 	AVRDetourCrowdAIController(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

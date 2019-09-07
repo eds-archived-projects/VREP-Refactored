@@ -39,7 +39,7 @@ AVRBaseCharacter::AVRBaseCharacter(const FObjectInitializer& ObjectInitializer)
 	{
 		VRReplicatedCamera->bOffsetByHMD = false;
 		VRReplicatedCamera->SetupAttachment(NetSmoother);
-		VRReplicatedCamera->OverrideSendTransform = &AVRBaseCharacter::Server_SendTransformCamera;
+		VRReplicatedCamera->ServerRPC_SendTransformFunc = &AVRBaseCharacter::Server_SendTransformCamera;
 	}
 
 	VRMovementReference = NULL;

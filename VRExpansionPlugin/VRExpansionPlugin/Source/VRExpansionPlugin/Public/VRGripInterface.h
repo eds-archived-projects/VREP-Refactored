@@ -1,15 +1,23 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
+
+// Unreal
 #include "CoreMinimal.h"
 #include "UObject/ObjectMacros.h"
 #include "UObject/ScriptMacros.h"
+
+// VREP
 #include "VRBPDatatypes.h"
 #include "GripScripts/VRGripScriptBase.h"
 #include "UObject/Interface.h"
 
+// UHeader Tool
 #include "VRGripInterface.generated.h"
 
+
+
+// Classes
 
 UINTERFACE(Blueprintable)
 class UVRGripInterface: public UInterface
@@ -24,9 +32,7 @@ class VREXPANSIONPLUGIN_API IVRGripInterface
  
 public:
 
-	// Set up as deny instead of allow so that default allows for gripping
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface", meta = (DisplayName = "IsDenyingGrips"))
-		bool DenyGripping();
+	//UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
 
 	// How an interfaced object behaves when teleporting
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
@@ -66,7 +72,19 @@ public:
 
 	// Get closest slot in range
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
-		void ClosestGripSlotInRange(FVector WorldLocation, bool bSecondarySlot,  bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController = nullptr, FName OverridePrefix = NAME_None);
+		void ClosestGripSlotInRange
+		(
+			FVector                         WorldLocation                ,
+			bool                            bSecondarySlot               , 
+			bool&                           bHadSlotInRange              , 
+			FTransform&                     SlotWorldTransform           ,
+			UGripMotionControllerComponent* CallingController = nullptr  , 
+			FName                           OverridePrefix    = NAME_None
+		);
+
+	// Set up as deny instead of allow so that default allows for gripping
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface", meta = (DisplayName = "IsDenyingGrips"))
+		bool DenyGripping();
 
 	// Events that can be called for interface inheriting actors
 

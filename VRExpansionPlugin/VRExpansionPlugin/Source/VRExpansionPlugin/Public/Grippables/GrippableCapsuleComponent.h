@@ -2,31 +2,45 @@
 
 #pragma once
 
+// Unreal
 #include "CoreMinimal.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/ActorChannel.h"
+#include "GameplayTagAssetInterface.h"
+#include "GameplayTagContainer.h"
+
+// VREP
+#include "GripScripts/VRGripScriptBase.h"
 #include "VRBPDatatypes.h"
 #include "VRGripInterface.h"
 #include "VRExpansionFunctionLibrary.h"
-#include "GameplayTagContainer.h"
-#include "GameplayTagAssetInterface.h"
-#include "Components/CapsuleComponent.h"
-#include "GripScripts/VRGripScriptBase.h"
-#include "Engine/ActorChannel.h"
+
+// UHeader Tool
 #include "GrippableCapsuleComponent.generated.h"
+
+
 
 /**
 *
 */
-
 UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent), ClassGroup = (VRExpansionPlugin))
 class VREXPANSIONPLUGIN_API UGrippableCapsuleComponent : public UCapsuleComponent, public IVRGripInterface, public IGameplayTagAssetInterface
 {
 	GENERATED_BODY()
 
 public:
+
+	// Constructor & Destructor
+
 	UGrippableCapsuleComponent(const FObjectInitializer& ObjectInitializer);
-
-
+	
 	~UGrippableCapsuleComponent();
+
+
+	// Functions
+
+	// UCapsuleComponent Overloads
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
