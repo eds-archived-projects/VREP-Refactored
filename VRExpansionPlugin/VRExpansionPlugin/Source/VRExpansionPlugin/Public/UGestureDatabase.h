@@ -3,7 +3,7 @@
 // Unreal
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "ObjectMacros.h"
+#include "UObject/ObjectMacros.h"
 
 // VREP
 #include "FVRGesture.h"

@@ -4,7 +4,7 @@
 
 // Unreal
 #include "CoreMinimal.h"
-#include "ObjectMacros.h"
+#include "UObject/ObjectMacros.h"
 
 // IWVR
 #include "FBPAdvGripPhysicsSettings.h"

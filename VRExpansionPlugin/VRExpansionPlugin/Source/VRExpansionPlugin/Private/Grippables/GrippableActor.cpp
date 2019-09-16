@@ -513,7 +513,7 @@ void AGrippableActor::OnGripRelease_Implementation(UGripMotionControllerComponen
 void AGrippableActor::OnSecondaryGrip_Implementation       (USceneComponent* SecondaryGripComponent         , const FBPActorGripInformation& GripInformation) {}
 void AGrippableActor::OnSecondaryGripRelease_Implementation(USceneComponent* ReleasingSecondaryGripComponent, const FBPActorGripInformation& GripInformation) {}
 
-void AGrippableActor::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation& GripInformation, float DeltaTime) {}
+void AGrippableActor::TickGrip_Implementation(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation, float DeltaTime) {}
 
 // Interaction Functions
 

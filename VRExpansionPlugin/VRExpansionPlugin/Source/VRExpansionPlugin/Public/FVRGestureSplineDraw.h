@@ -4,7 +4,7 @@
 #include "CoreMinimal.h"
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
-#include "ObjectMacros.h"
+#include "UObject/ObjectMacros.h"
 
 
 // UHeader Tool
