@@ -2,21 +2,25 @@
 
 #pragma once
 
+// Unreal
 #include "CoreMinimal.h"
 #include "Engine/StaticMeshActor.h"
+#include "GameplayTagContainer.h"
+#include "GameplayTagAssetInterface.h"
+#include "Engine/ActorChannel.h"
+#include "DrawDebugHelpers.h"
+
+// VREP
 #include "VRBPDatatypes.h"
 #include "VRGripInterface.h"
 #include "GripMotionControllerComponent.h"
 #include "VRExpansionFunctionLibrary.h"
-#include "GameplayTagContainer.h"
-#include "GameplayTagAssetInterface.h"
 #include "GripScripts/VRGripScriptBase.h"
-#include "Engine/ActorChannel.h"
-#include "DrawDebugHelpers.h"
 #include "Grippables/GrippablePhysicsReplication.h"
 #include "Misc/BucketUpdateSubsystem.h"
-#include "GrippableStaticMeshActor.generated.h"
 
+// UHeader Tool
+#include "GrippableStaticMeshActor.generated.h"
 
 /**
 * A component specifically for being able to turn off movement replication in the component at will
@@ -37,7 +41,6 @@ public:
 
 	virtual void PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker) override;
 };
-
 
 /**
 *
@@ -221,9 +224,13 @@ public:
 
 	// Events //
 
-	// Event triggered each tick on the interfaced object when gripped, can be used for custom movement or grip based logic
+	// Event triggered on the interfaced object when child component is gripped
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void TickGrip(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime);
+		void OnChildGrip(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation);
+
+	// Event triggered on the interfaced object when child component is released
+	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
+		void OnChildGripRelease(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed = false);
 
 	// Event triggered on the interfaced object when gripped
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
@@ -233,14 +240,6 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
 		void OnGripRelease(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed = false);
 
-	// Event triggered on the interfaced object when child component is gripped
-	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void OnChildGrip(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation);
-
-	// Event triggered on the interfaced object when child component is released
-	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void OnChildGripRelease(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed = false);
-
 	// Event triggered on the interfaced object when secondary gripped
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
 		void OnSecondaryGrip(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation);
@@ -249,19 +248,15 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
 		void OnSecondaryGripRelease(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation);
 
-	// Interaction Functions
+	// Event triggered each tick on the interfaced object when gripped, can be used for custom movement or grip based logic
+	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
+		void TickGrip(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime);
 
-	// Call to use an object
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
-		void OnUsed();
+	// Interaction Functions
 
 	// Call to stop using an object
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
 		void OnEndUsed();
-
-	// Call to use an object
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
-		void OnSecondaryUsed();
 
 	// Call to stop using an object
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
@@ -270,4 +265,15 @@ public:
 	// Call to send an action event to the object
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
 		void OnInput(FKey Key, EInputEvent KeyEvent);
+
+	// Call to use an object
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
+		void OnSecondaryUsed();
+
+	// Call to use an object
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
+		void OnUsed();
+
+	// Declares
+
 };

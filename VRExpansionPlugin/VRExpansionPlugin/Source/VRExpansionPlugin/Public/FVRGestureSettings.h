@@ -2,7 +2,7 @@
 
 // Unreal
 #include "CoreMinimal.h"
-#include "ObjectMacros.h"
+#include "UObject/ObjectMacros.h"
 
 // UHeader Tool
 #include "FVRGestureSettings.generated.h"

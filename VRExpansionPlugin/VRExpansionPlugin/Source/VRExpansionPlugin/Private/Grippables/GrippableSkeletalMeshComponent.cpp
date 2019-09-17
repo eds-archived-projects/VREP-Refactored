@@ -1,9 +1,16 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// VREP
 #include "Grippables/GrippableSkeletalMeshComponent.h"
+
+// Unreal
 #include "Net/UnrealNetwork.h"
 
-  //=============================================================================
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 UGrippableSkeletalMeshComponent::UGrippableSkeletalMeshComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -29,49 +36,17 @@ UGrippableSkeletalMeshComponent::UGrippableSkeletalMeshComponent(const FObjectIn
 	bRepGripSettingsAndGameplayTags = true;
 }
 
-void UGrippableSkeletalMeshComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	
-	DOREPLIFETIME/*_CONDITION*/(UGrippableSkeletalMeshComponent, GripLogicScripts);// , COND_Custom);
-	DOREPLIFETIME(UGrippableSkeletalMeshComponent, bRepGripSettingsAndGameplayTags);
-	DOREPLIFETIME(UGrippableSkeletalMeshComponent, bReplicateMovement);
-	DOREPLIFETIME_CONDITION(UGrippableSkeletalMeshComponent, VRGripInterfaceSettings, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGrippableSkeletalMeshComponent, GameplayTags, COND_Custom);
-}
-
-void UGrippableSkeletalMeshComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
-{
-	Super::PreReplication(ChangedPropertyTracker);
-
-	// Don't replicate if set to not do it
-	DOREPLIFETIME_ACTIVE_OVERRIDE(UGrippableSkeletalMeshComponent, VRGripInterfaceSettings, bRepGripSettingsAndGameplayTags);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(UGrippableSkeletalMeshComponent, GameplayTags, bRepGripSettingsAndGameplayTags);
-
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
-}
-
-bool UGrippableSkeletalMeshComponent::ReplicateSubobjects(UActorChannel* Channel, class FOutBunch *Bunch, FReplicationFlags *RepFlags)
-{
-	bool WroteSomething = Super::ReplicateSubobjects(Channel, Bunch, RepFlags);
-
-	for (UVRGripScriptBase* Script : GripLogicScripts)
-	{
-		if (Script && !Script->IsPendingKill())
-		{
-			WroteSomething |= Channel->ReplicateSubobject(Script, *Bunch, *RepFlags);
-		}
-	}
-
-	return WroteSomething;
-}
-
-//=============================================================================
 UGrippableSkeletalMeshComponent::~UGrippableSkeletalMeshComponent()
+{}
+
+// Functions
+
+void UGrippableSkeletalMeshComponent::SetDenyGripping(bool bDenyGripping)
 {
+	VRGripInterfaceSettings.bDenyGripping = bDenyGripping;
 }
+
+// Actor Overloads
 
 void UGrippableSkeletalMeshComponent::BeginPlay()
 {
@@ -105,150 +80,7 @@ void UGrippableSkeletalMeshComponent::EndPlay(const EEndPlayReason::Type EndPlay
 	}
 }
 
-void UGrippableSkeletalMeshComponent::SetDenyGripping(bool bDenyGripping)
-{
-	VRGripInterfaceSettings.bDenyGripping = bDenyGripping;
-}
-
-void UGrippableSkeletalMeshComponent::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime) {}
-void UGrippableSkeletalMeshComponent::OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
-void UGrippableSkeletalMeshComponent::OnGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
-void UGrippableSkeletalMeshComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
-void UGrippableSkeletalMeshComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
-void UGrippableSkeletalMeshComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UGrippableSkeletalMeshComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UGrippableSkeletalMeshComponent::OnUsed_Implementation() {}
-void UGrippableSkeletalMeshComponent::OnEndUsed_Implementation() {}
-void UGrippableSkeletalMeshComponent::OnSecondaryUsed_Implementation() {}
-void UGrippableSkeletalMeshComponent::OnEndSecondaryUsed_Implementation() {}
-void UGrippableSkeletalMeshComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
-bool UGrippableSkeletalMeshComponent::RequestsSocketing_Implementation(USceneComponent *& ParentToSocketTo, FName & OptionalSocketName, FTransform_NetQuantize & RelativeTransform) { return false; }
-
-bool UGrippableSkeletalMeshComponent::DenyGripping_Implementation()
-{
-	return VRGripInterfaceSettings.bDenyGripping;
-}
-
-EGripInterfaceTeleportBehavior UGrippableSkeletalMeshComponent::TeleportBehavior_Implementation()
-{
-	return VRGripInterfaceSettings.OnTeleportBehavior;
-}
-
-bool UGrippableSkeletalMeshComponent::SimulateOnDrop_Implementation()
-{
-	return VRGripInterfaceSettings.bSimulateOnDrop;
-}
-
-EGripCollisionType UGrippableSkeletalMeshComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
-{
-	return bIsSlot ? VRGripInterfaceSettings.SlotDefaultGripType : VRGripInterfaceSettings.FreeDefaultGripType;
-}
-
-ESecondaryGripType UGrippableSkeletalMeshComponent::SecondaryGripType_Implementation()
-{
-	return VRGripInterfaceSettings.SecondaryGripType;
-}
-
-EGripMovementReplicationSettings UGrippableSkeletalMeshComponent::GripMovementReplicationType_Implementation()
-{
-	return VRGripInterfaceSettings.MovementReplicationType;
-}
-
-EGripLateUpdateSettings UGrippableSkeletalMeshComponent::GripLateUpdateSetting_Implementation()
-{
-	return VRGripInterfaceSettings.LateUpdateSetting;
-}
-
-void UGrippableSkeletalMeshComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
-{
-	GripStiffnessOut = VRGripInterfaceSettings.ConstraintStiffness;
-	GripDampingOut = VRGripInterfaceSettings.ConstraintDamping;
-}
-
-FBPAdvGripSettings UGrippableSkeletalMeshComponent::AdvancedGripSettings_Implementation()
-{
-	return VRGripInterfaceSettings.AdvancedGripSettings;
-}
-
-float UGrippableSkeletalMeshComponent::GripBreakDistance_Implementation()
-{
-	return VRGripInterfaceSettings.ConstraintBreakDistance;
-}
-
-void UGrippableSkeletalMeshComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
-{
-	if (OverridePrefix.IsNone())
-		bSecondarySlot ? OverridePrefix = "VRGripS" : OverridePrefix = "VRGripP";
-
-	UVRExpansionFunctionLibrary::GetGripSlotInRangeByTypeName_Component(OverridePrefix, this, WorldLocation, bSecondarySlot ? VRGripInterfaceSettings.SecondarySlotRange : VRGripInterfaceSettings.PrimarySlotRange, bHadSlotInRange, SlotWorldTransform);
-}
-
-bool UGrippableSkeletalMeshComponent::AllowsMultipleGrips_Implementation()
-{
-	return VRGripInterfaceSettings.bAllowMultipleGrips;
-}
-
-void UGrippableSkeletalMeshComponent::IsHeld_Implementation(TArray<FBPGripPair> & HoldingControllers, bool & bIsHeld)
-{
-	HoldingControllers = VRGripInterfaceSettings.HoldingControllers;
-	bIsHeld = VRGripInterfaceSettings.bIsHeld;
-}
-
-void UGrippableSkeletalMeshComponent::SetHeld_Implementation(UGripMotionControllerComponent * HoldingController, uint8 GripID, bool bIsHeld)
-{
-	if (bIsHeld)
-	{
-		if (VRGripInterfaceSettings.MovementReplicationType != EGripMovementReplicationSettings::ForceServerSideMovement)
-		{
-			if (!VRGripInterfaceSettings.bIsHeld)
-				bOriginalReplicatesMovement = bReplicateMovement;
-			bReplicateMovement = false;
-		}
-
-		VRGripInterfaceSettings.HoldingControllers.AddUnique(FBPGripPair(HoldingController, GripID));
-	}
-	else
-	{
-		if (VRGripInterfaceSettings.MovementReplicationType != EGripMovementReplicationSettings::ForceServerSideMovement)
-		{
-			bReplicateMovement = bOriginalReplicatesMovement;
-		}
-
-		VRGripInterfaceSettings.HoldingControllers.Remove(FBPGripPair(HoldingController, GripID));
-	}
-
-	VRGripInterfaceSettings.bIsHeld = VRGripInterfaceSettings.HoldingControllers.Num() > 0;
-}
-
-/*FBPInteractionSettings UGrippableSkeletalMeshComponent::GetInteractionSettings_Implementation()
-{
-	return VRGripInterfaceSettings.InteractionSettings;
-}*/
-
-bool UGrippableSkeletalMeshComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
-{
-	ArrayReference = GripLogicScripts;
-	return GripLogicScripts.Num() > 0;
-}
- 
-void UGrippableSkeletalMeshComponent::PreDestroyFromReplication()
-{
-	Super::PreDestroyFromReplication();
-
-	// Destroy any sub-objects we created
-	for (int32 i = 0; i < GripLogicScripts.Num(); ++i)
-	{
-		if (UObject *SubObject = GripLogicScripts[i])
-		{
-			SubObject->PreDestroyFromReplication();
-			SubObject->MarkPendingKill();
-		}
-	}
-
-	GripLogicScripts.Empty();
-}
-
-void UGrippableSkeletalMeshComponent::GetSubobjectsWithStableNamesForNetworking(TArray<UObject*> &ObjList)
+void UGrippableSkeletalMeshComponent::GetSubobjectsWithStableNamesForNetworking(TArray<UObject*>& ObjList)
 {
 	for (int32 i = 0; i < GripLogicScripts.Num(); ++i)
 	{
@@ -283,4 +115,194 @@ void UGrippableSkeletalMeshComponent::OnComponentDestroyed(bool bDestroyingHiera
 	}
 
 	GripLogicScripts.Empty();
+}
+
+void UGrippableSkeletalMeshComponent::PreDestroyFromReplication()
+{
+	Super::PreDestroyFromReplication();
+
+	// Destroy any sub-objects we created
+	for (int32 i = 0; i < GripLogicScripts.Num(); ++i)
+	{
+		if (UObject *SubObject = GripLogicScripts[i])
+		{
+			SubObject->PreDestroyFromReplication();
+			SubObject->MarkPendingKill();
+		}
+	}
+
+	GripLogicScripts.Empty();
+}
+
+void UGrippableSkeletalMeshComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
+{
+	Super::PreReplication(ChangedPropertyTracker);
+
+	// Don't replicate if set to not do it
+	DOREPLIFETIME_ACTIVE_OVERRIDE(UGrippableSkeletalMeshComponent, VRGripInterfaceSettings, bRepGripSettingsAndGameplayTags);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(UGrippableSkeletalMeshComponent, GameplayTags, bRepGripSettingsAndGameplayTags);
+
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
+}
+
+bool UGrippableSkeletalMeshComponent::ReplicateSubobjects(UActorChannel* Channel, class FOutBunch* Bunch, FReplicationFlags* RepFlags)
+{
+	bool WroteSomething = Super::ReplicateSubobjects(Channel, Bunch, RepFlags);
+
+	for (UVRGripScriptBase* Script : GripLogicScripts)
+	{
+		if (Script && !Script->IsPendingKill())
+		{
+			WroteSomething |= Channel->ReplicateSubobject(Script, *Bunch, *RepFlags);
+		}
+	}
+
+	return WroteSomething;
+}
+
+// IVRGripInterface Implementation
+
+FBPAdvGripSettings UGrippableSkeletalMeshComponent::AdvancedGripSettings_Implementation()
+{
+	return VRGripInterfaceSettings.AdvancedGripSettings;
+}
+
+bool UGrippableSkeletalMeshComponent::AllowsMultipleGrips_Implementation()
+{
+	return VRGripInterfaceSettings.bAllowMultipleGrips;
+}
+
+void UGrippableSkeletalMeshComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool& bHadSlotInRange, FTransform& SlotWorldTransform, UGripMotionControllerComponent* CallingController, FName OverridePrefix)
+{
+	if (OverridePrefix.IsNone())
+		bSecondarySlot ? OverridePrefix = "VRGripS" : OverridePrefix = "VRGripP";
+
+	UVRExpansionFunctionLibrary::GetGripSlotInRangeByTypeName_Component(OverridePrefix, this, WorldLocation, bSecondarySlot ? VRGripInterfaceSettings.SecondarySlotRange : VRGripInterfaceSettings.PrimarySlotRange, bHadSlotInRange, SlotWorldTransform);
+}
+
+bool UGrippableSkeletalMeshComponent::DenyGripping_Implementation()
+{
+	return VRGripInterfaceSettings.bDenyGripping;
+}
+
+bool UGrippableSkeletalMeshComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*>& ArrayReference)
+{
+	ArrayReference = GripLogicScripts;
+	return GripLogicScripts.Num() > 0;
+}
+
+void UGrippableSkeletalMeshComponent::GetGripStiffnessAndDamping_Implementation(float& GripStiffnessOut, float& GripDampingOut)
+{
+	GripStiffnessOut = VRGripInterfaceSettings.ConstraintStiffness;
+	GripDampingOut = VRGripInterfaceSettings.ConstraintDamping;
+}
+
+/*FBPInteractionSettings UGrippableSkeletalMeshComponent::GetInteractionSettings_Implementation()
+{
+	return VRGripInterfaceSettings.InteractionSettings;
+}*/
+
+EGripCollisionType UGrippableSkeletalMeshComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
+{
+	return bIsSlot ? VRGripInterfaceSettings.SlotDefaultGripType : VRGripInterfaceSettings.FreeDefaultGripType;
+}
+
+float UGrippableSkeletalMeshComponent::GripBreakDistance_Implementation()
+{
+	return VRGripInterfaceSettings.ConstraintBreakDistance;
+}
+
+EGripLateUpdateSettings UGrippableSkeletalMeshComponent::GripLateUpdateSetting_Implementation()
+{
+	return VRGripInterfaceSettings.LateUpdateSetting;
+}
+
+EGripMovementReplicationSettings UGrippableSkeletalMeshComponent::GripMovementReplicationType_Implementation()
+{
+	return VRGripInterfaceSettings.MovementReplicationType;
+}
+
+void UGrippableSkeletalMeshComponent::IsHeld_Implementation(TArray<FBPGripPair>& HoldingControllers, bool& bIsHeld)
+{
+	HoldingControllers = VRGripInterfaceSettings.HoldingControllers;
+	bIsHeld = VRGripInterfaceSettings.bIsHeld;
+}
+
+ESecondaryGripType UGrippableSkeletalMeshComponent::SecondaryGripType_Implementation()
+{
+	return VRGripInterfaceSettings.SecondaryGripType;
+}
+
+void UGrippableSkeletalMeshComponent::SetHeld_Implementation(UGripMotionControllerComponent* HoldingController, uint8 GripID, bool bIsHeld)
+{
+	if (bIsHeld)
+	{
+		if (VRGripInterfaceSettings.MovementReplicationType != EGripMovementReplicationSettings::ForceServerSideMovement)
+		{
+			if (!VRGripInterfaceSettings.bIsHeld)
+				bOriginalReplicatesMovement = bReplicateMovement;
+			bReplicateMovement = false;
+		}
+
+		VRGripInterfaceSettings.HoldingControllers.AddUnique(FBPGripPair(HoldingController, GripID));
+	}
+	else
+	{
+		if (VRGripInterfaceSettings.MovementReplicationType != EGripMovementReplicationSettings::ForceServerSideMovement)
+		{
+			bReplicateMovement = bOriginalReplicatesMovement;
+		}
+
+		VRGripInterfaceSettings.HoldingControllers.Remove(FBPGripPair(HoldingController, GripID));
+	}
+
+	VRGripInterfaceSettings.bIsHeld = VRGripInterfaceSettings.HoldingControllers.Num() > 0;
+}
+
+bool UGrippableSkeletalMeshComponent::SimulateOnDrop_Implementation()
+{
+	return VRGripInterfaceSettings.bSimulateOnDrop;
+}
+
+EGripInterfaceTeleportBehavior UGrippableSkeletalMeshComponent::TeleportBehavior_Implementation()
+{
+	return VRGripInterfaceSettings.OnTeleportBehavior;
+}
+
+// Event Functions
+
+void UGrippableSkeletalMeshComponent::OnChildGrip_Implementation(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation) {}
+void UGrippableSkeletalMeshComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent* ReleasingController, const FBPActorGripInformation& GripInformation, bool bWasSocketed) {}
+
+void UGrippableSkeletalMeshComponent::OnGrip_Implementation(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation) {}
+void UGrippableSkeletalMeshComponent::OnGripRelease_Implementation(UGripMotionControllerComponent* ReleasingController, const FBPActorGripInformation& GripInformation, bool bWasSocketed) {}
+
+void UGrippableSkeletalMeshComponent::OnSecondaryGrip_Implementation(USceneComponent* SecondaryGripComponent, const FBPActorGripInformation& GripInformation) {}
+void UGrippableSkeletalMeshComponent::OnSecondaryGripRelease_Implementation(USceneComponent* ReleasingSecondaryGripComponent, const FBPActorGripInformation& GripInformation) {}
+
+bool UGrippableSkeletalMeshComponent::RequestsSocketing_Implementation(USceneComponent*& ParentToSocketTo, FName& OptionalSocketName, FTransform_NetQuantize& RelativeTransform) { return false; }
+void UGrippableSkeletalMeshComponent::TickGrip_Implementation(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation, float DeltaTime) {}
+
+
+//  Interaction Functions
+
+void UGrippableSkeletalMeshComponent::OnEndUsed_Implementation() {}
+void UGrippableSkeletalMeshComponent::OnEndSecondaryUsed_Implementation() {}
+
+void UGrippableSkeletalMeshComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
+
+void UGrippableSkeletalMeshComponent::OnSecondaryUsed_Implementation() {}
+void UGrippableSkeletalMeshComponent::OnUsed_Implementation() {}
+
+void UGrippableSkeletalMeshComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME/*_CONDITION*/(UGrippableSkeletalMeshComponent, GripLogicScripts);// , COND_Custom);
+	DOREPLIFETIME(UGrippableSkeletalMeshComponent, bRepGripSettingsAndGameplayTags);
+	DOREPLIFETIME(UGrippableSkeletalMeshComponent, bReplicateMovement);
+	DOREPLIFETIME_CONDITION(UGrippableSkeletalMeshComponent, VRGripInterfaceSettings, COND_Custom);
+	DOREPLIFETIME_CONDITION(UGrippableSkeletalMeshComponent, GameplayTags, COND_Custom);
 }

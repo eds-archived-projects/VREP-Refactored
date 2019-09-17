@@ -4,8 +4,8 @@
 
 // Unreal
 #include "CoreMinimal.h"
-#include "ObjectMacros.h"
-#include "Class.h"
+#include "UObject/ObjectMacros.h"
+#include "UObject/Class.h"
 #include "Components/SceneComponent.h"
 
 // IWVR
