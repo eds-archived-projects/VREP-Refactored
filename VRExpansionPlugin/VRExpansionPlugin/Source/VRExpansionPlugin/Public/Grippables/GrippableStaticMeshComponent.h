@@ -137,22 +137,6 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
 		EGripInterfaceTeleportBehavior TeleportBehavior();
 
-	// Variables
-
-	// Original Replicates 
-		bool bOriginalReplicatesMovement;
-
-	// Requires bReplicates to be true for the component
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "VRGripInterface|Replication")
-		bool bRepGripSettingsAndGameplayTags;
-
-	// Overrides the default of : true and allows for controlling it like in an actor, should be default of off normally with grippable components
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "VRGripInterface|Replication")
-		bool bReplicateMovement;
-
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "VRGripInterface")
-		FBPInterfaceProperties VRGripInterfaceSettings;
-
 	// Events //
 
 	// Event triggered on the interfaced object when gripped
@@ -208,4 +192,20 @@ public:
 	// Returns if the object wants to be socketed
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripInterface")
 		bool RequestsSocketing(USceneComponent*& ParentToSocketTo, FName& OptionalSocketName, FTransform_NetQuantize& RelativeTransform);
+
+	// Declares
+
+    // Original Replicates 
+	bool bOriginalReplicatesMovement;
+
+	// Requires bReplicates to be true for the component
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "VRGripInterface|Replication")
+		bool bRepGripSettingsAndGameplayTags;
+
+	// Overrides the default of : true and allows for controlling it like in an actor, should be default of off normally with grippable components
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "VRGripInterface|Replication")
+		bool bReplicateMovement;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "VRGripInterface")
+		FBPInterfaceProperties VRGripInterfaceSettings;
 };

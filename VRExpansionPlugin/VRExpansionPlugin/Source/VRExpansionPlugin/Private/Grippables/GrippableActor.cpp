@@ -7,13 +7,11 @@
 #include "TimerManager.h"
 #include "Net/UnrealNetwork.h"
 
-
-
 // Public
 
 // Constructor & Destructor
 
-  //=============================================================================
+//=============================================================================
 AGrippableActor::AGrippableActor(const FObjectInitializer& ObjectInitializer) : 
 	Super                          (),
 	bAllowIgnoringAttachOnOwner(true)
@@ -46,10 +44,8 @@ AGrippableActor::AGrippableActor(const FObjectInitializer& ObjectInitializer) :
 	MinNetUpdateFrequency = 30.0f;
 }
 
-//=============================================================================
 AGrippableActor::~AGrippableActor()
 {}
-
 
 // Functions
 

@@ -6,13 +6,11 @@
 // Unreal
 #include "Net/UnrealNetwork.h"
 
-
-
 // Public
 
 // Constructor & Destructor
 
-  //=============================================================================
+//=============================================================================
 UGrippableBoxComponent::UGrippableBoxComponent(const FObjectInitializer& ObjectInitializer) : 
 	Super                          (ObjectInitializer),
 	bRepGripSettingsAndGameplayTags(true             )

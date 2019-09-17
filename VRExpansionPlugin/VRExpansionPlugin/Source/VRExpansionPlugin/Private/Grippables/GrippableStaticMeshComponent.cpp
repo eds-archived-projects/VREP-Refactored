@@ -1,10 +1,10 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
-// Parent Header
-#include "Grippables/GrippableStaticMeshComponent.h"
-
 // Unreal
 #include "Net/UnrealNetwork.h"
+
+// VREP
+#include "Grippables/GrippableStaticMeshComponent.h"
 
 // Public
 
@@ -36,12 +36,8 @@ UGrippableStaticMeshComponent::UGrippableStaticMeshComponent(const FObjectInitia
 	bRepGripSettingsAndGameplayTags = true;
 }
 
-//=============================================================================
-
-
 UGrippableStaticMeshComponent::~UGrippableStaticMeshComponent()
-{
-}
+{}
 
 // Functions
 
@@ -282,6 +278,7 @@ void UGrippableStaticMeshComponent::OnGripRelease_Implementation(UGripMotionCont
 
 void UGrippableStaticMeshComponent::OnSecondaryGrip_Implementation(USceneComponent* SecondaryGripComponent, const FBPActorGripInformation& GripInformation) {}
 void UGrippableStaticMeshComponent::OnSecondaryGripRelease_Implementation(USceneComponent* ReleasingSecondaryGripComponent, const FBPActorGripInformation& GripInformation) {}
+bool UGrippableStaticMeshComponent::RequestsSocketing_Implementation(USceneComponent*& ParentToSocketTo, FName& OptionalSocketName, FTransform_NetQuantize& RelativeTransform) { return false; }
 void UGrippableStaticMeshComponent::TickGrip_Implementation(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation, float DeltaTime) {}
 
 // Interaction Functions
@@ -291,7 +288,6 @@ void UGrippableStaticMeshComponent::OnEndUsed_Implementation() {}
 void UGrippableStaticMeshComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
 void UGrippableStaticMeshComponent::OnSecondaryUsed_Implementation() {}
 void UGrippableStaticMeshComponent::OnUsed_Implementation() {}
-bool UGrippableStaticMeshComponent::RequestsSocketing_Implementation(USceneComponent*& ParentToSocketTo, FName& OptionalSocketName, FTransform_NetQuantize& RelativeTransform) { return false; }
 
 void UGrippableStaticMeshComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
 {
