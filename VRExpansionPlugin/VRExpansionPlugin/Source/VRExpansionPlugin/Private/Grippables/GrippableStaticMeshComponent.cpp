@@ -1,10 +1,14 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
-// VREP
+// Parent Header
 #include "Grippables/GrippableStaticMeshComponent.h"
 
 // Unreal
 #include "Net/UnrealNetwork.h"
+
+// VREP
+
+
 
 // Public
 
