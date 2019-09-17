@@ -1,11 +1,10 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
-// Unreal
-#include "Net/UnrealNetwork.h"
-
 // VREP
 #include "Grippables/GrippableCapsuleComponent.h"
 
+// Unreal
+#include "Net/UnrealNetwork.h"
 
   //=============================================================================
 UGrippableCapsuleComponent::UGrippableCapsuleComponent(const FObjectInitializer& ObjectInitializer)

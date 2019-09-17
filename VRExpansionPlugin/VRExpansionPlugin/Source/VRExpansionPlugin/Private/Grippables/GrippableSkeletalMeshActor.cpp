@@ -1,12 +1,11 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
-// Unreal
-#include "TimerManager.h"
-#include "Net/UnrealNetwork.h"
-
 // VREP
 #include "Grippables/GrippableSkeletalMeshActor.h"
 
+// Unreal
+#include "TimerManager.h"
+#include "Net/UnrealNetwork.h"
 
 // Public
 
