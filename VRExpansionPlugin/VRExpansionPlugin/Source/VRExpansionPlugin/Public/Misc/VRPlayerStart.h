@@ -1,12 +1,20 @@
 #pragma once
 
+// Includes
+
+
+// Unreal
 #include "CoreMinimal.h"
-#include "UObject/ObjectMacros.h"
-#include "GameFramework/PlayerStart.h"
-#include "Engine/NavigationObjectBase.h"
-#include "Components/SceneComponent.h"
-#include "Components/CapsuleComponent.h"
 #include "Components/BillboardComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SceneComponent.h"
+#include "Engine/NavigationObjectBase.h"
+#include "GameFramework/PlayerStart.h"
+#include "UObject/ObjectMacros.h"
+
+// VREP
+
+// UHeader Tool
 #include "VRPlayerStart.generated.h"
 
 /**
@@ -22,26 +30,10 @@ private:
 	UPROPERTY()
 		class USceneComponent* VRRootComp;
 public:
-
+	// Constructor & Destructor
 	AVRPlayerStart(const FObjectInitializer& ObjectInitializer);
-
-	/** Returns VRRootComp subobject **/
-	class USceneComponent* GetVRRootComponent() const { return VRRootComp; }
-
-	// Override this to use capsule even if it isn't the root component
-	virtual void GetSimpleCollisionCylinder(float& CollisionRadius, float& CollisionHalfHeight) const override
-	{
-		UCapsuleComponent * CapsuleComp = GetCapsuleComponent();
-		if (CapsuleComp != nullptr && CapsuleComp->IsRegistered() && CapsuleComp->IsCollisionEnabled())
-		{
-			// Note: assuming vertical orientation
-			CapsuleComp->GetScaledCapsuleSize(CollisionRadius, CollisionHalfHeight);
-		}
-		else
-		{
-			Super::GetSimpleCollisionCylinder(CollisionRadius, CollisionHalfHeight);
-		}
-	}
+	
+	// Functions
 
 	void FindBase() override
 	{
@@ -94,7 +86,24 @@ public:
 		}
 	}
 
+	// Override this to use capsule even if it isn't the root component
+	virtual void GetSimpleCollisionCylinder(float& CollisionRadius, float& CollisionHalfHeight) const override
+	{
+		UCapsuleComponent * CapsuleComp = GetCapsuleComponent();
+		if (CapsuleComp != nullptr && CapsuleComp->IsRegistered() && CapsuleComp->IsCollisionEnabled())
+		{
+			// Note: assuming vertical orientation
+			CapsuleComp->GetScaledCapsuleSize(CollisionRadius, CollisionHalfHeight);
+		}
+		else
+		{
+			Super::GetSimpleCollisionCylinder(CollisionRadius, CollisionHalfHeight);
+		}
+	}
 
+	/** Returns VRRootComp subobject **/
+	class USceneComponent* GetVRRootComponent() const { return VRRootComp; }
+	
 	void Validate() override
 	{
 		if (ShouldBeBased() && (GetGoodSprite() || GetBadSprite()))

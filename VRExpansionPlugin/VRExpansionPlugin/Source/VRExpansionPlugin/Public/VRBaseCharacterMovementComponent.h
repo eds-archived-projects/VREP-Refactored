@@ -1,14 +1,24 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
 #pragma once
-#include "CoreMinimal.h"
-#include "VRBPDatatypes.h"
+
+// Includes
+
+// Unreal
 #include "AITypes.h"
+#include "CoreMinimal.h"
 #include "AI/Navigation/NavigationTypes.h"
-#include "Navigation/PathFollowingComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Components/SkeletalMeshComponent.h"
+#include "Navigation/PathFollowingComponent.h"
+
+
+// VREP
+#include "VRBPDatatypes.h"
+
+
+// UHeader Tool
 #include "VRBaseCharacterMovementComponent.generated.h"
 
 /** Delegate for notification when to handle a climbing step up, will override default step up logic if is bound to. */
@@ -61,27 +71,20 @@ enum class EVRMoveActionDataReq : uint8
 	VRMOVEACTIONDATA_LOC_AND_ROT = 0x03
 };
 
-
-
 USTRUCT()
 struct VREXPANSIONPLUGIN_API FVRMoveActionContainer
 {
 	GENERATED_USTRUCT_BODY()
 public:
-	UPROPERTY()
-	EVRMoveAction MoveAction;
-	UPROPERTY()
-	EVRMoveActionDataReq MoveActionDataReq;
-	UPROPERTY()
-	FVector MoveActionLoc;
-	UPROPERTY()
-	FRotator MoveActionRot;
+	// Constructor 
 
 	FVRMoveActionContainer()
 	{
 		Clear();
 	}
 
+	// Functions
+	
 	void Clear()
 	{
 		MoveAction = EVRMoveAction::VRMOVEACTION_None;
@@ -95,7 +98,7 @@ public:
 	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
 	{
 		bOutSuccess = true;
-		
+
 		Ar.SerializeBits(&MoveAction, 4); // 16 elements, only allowing 1 per frame, they aren't flags
 
 		switch (MoveAction)
@@ -105,7 +108,7 @@ public:
 		case EVRMoveAction::VRMOVEACTION_SnapTurn:
 		{
 			uint16 Yaw;
-			
+
 			if (Ar.IsSaving())
 			{
 				Yaw = FRotator::CompressAxisToShort(MoveActionRot.Yaw);
@@ -162,7 +165,22 @@ public:
 
 		return bOutSuccess;
 	}
+
+	// Declares
+
+	UPROPERTY()
+	EVRMoveAction MoveAction;
+
+	UPROPERTY()
+	EVRMoveActionDataReq MoveActionDataReq;
+
+	UPROPERTY()
+	FVector MoveActionLoc;
+
+	UPROPERTY()
+	FRotator MoveActionRot;
 };
+
 template<>
 struct TStructOpsTypeTraits< FVRMoveActionContainer > : public TStructOpsTypeTraitsBase2<FVRMoveActionContainer>
 {
@@ -244,20 +262,12 @@ struct TStructOpsTypeTraits< FVRMoveActionArray > : public TStructOpsTypeTraitsB
 	};
 };
 
-
 USTRUCT()
 struct VREXPANSIONPLUGIN_API FVRConditionalMoveRep
 {
 	GENERATED_USTRUCT_BODY()
 public:
-
-	UPROPERTY(Transient)
-		FVector CustomVRInputVector;
-	UPROPERTY(Transient)
-		FVector RequestedVelocity;
-	UPROPERTY(Transient)
-		FVRMoveActionArray MoveActionArray;
-		//FVRMoveActionContainer MoveAction;
+	// Constructor 
 
 	FVRConditionalMoveRep()
 	{
@@ -265,6 +275,8 @@ public:
 		RequestedVelocity = FVector::ZeroVector;
 	}
 
+	// Functions
+		   
 	/** Network serialization */
 	// Doing a custom NetSerialize here because this is sent via RPCs and should change on every update
 	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
@@ -297,6 +309,15 @@ public:
 		return bOutSuccess;
 	}
 
+	// Declares
+
+	UPROPERTY(Transient)
+		FVector CustomVRInputVector;
+	UPROPERTY(Transient)
+		FVRMoveActionArray MoveActionArray;
+	UPROPERTY(Transient)
+		FVector RequestedVelocity;
+	//FVRMoveActionContainer MoveAction;	
 };
 
 template<>
@@ -313,22 +334,8 @@ struct VREXPANSIONPLUGIN_API FVRConditionalMoveRep2
 {
 	GENERATED_USTRUCT_BODY()
 public:
-
-	// Moved these here to avoid having to duplicate tons of properties
-	UPROPERTY(Transient)
-		UPrimitiveComponent* ClientMovementBase;
-	UPROPERTY(Transient)
-		FName ClientBaseBoneName;
-
-	UPROPERTY(Transient)
-	uint16 ClientYaw;
-
-	UPROPERTY(Transient)
-	uint16 ClientPitch;
-
-	UPROPERTY(Transient)
-	uint8 ClientRoll;
-
+	// Constructor 
+	
 	FVRConditionalMoveRep2()
 	{
 		ClientMovementBase = nullptr;
@@ -338,13 +345,8 @@ public:
 		ClientYaw = 0;
 	}
 
-	void UnpackAndSetINTRotations(uint32 Rotation32)
-	{
-		// Reversed the order of these so it costs less to replicate
-		ClientYaw = (Rotation32 & 65535);
-		ClientPitch = (Rotation32 >> 16);
-	}
-
+	// Functions
+	   	  
 	/** Network serialization */
 	// Doing a custom NetSerialize here because this is sent via RPCs and should change on every update
 	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
@@ -394,6 +396,31 @@ public:
 		return bOutSuccess;
 	}
 
+	void UnpackAndSetINTRotations(uint32 Rotation32)
+	{
+		// Reversed the order of these so it costs less to replicate
+		ClientYaw = (Rotation32 & 65535);
+		ClientPitch = (Rotation32 >> 16);
+	}
+
+
+	// Declares
+
+	UPROPERTY(Transient)
+		FName ClientBaseBoneName;
+
+	// Moved these here to avoid having to duplicate tons of properties
+	UPROPERTY(Transient)
+		UPrimitiveComponent* ClientMovementBase;
+
+	UPROPERTY(Transient)
+		uint16 ClientPitch;
+
+	UPROPERTY(Transient)
+		uint8 ClientRoll;
+
+	UPROPERTY(Transient)
+		uint16 ClientYaw;
 };
 
 template<>
@@ -442,22 +469,11 @@ private:
 	EKinematicBonesUpdateToPhysics::Type SavedUpdateSetting;
 };
 
-
 class VREXPANSIONPLUGIN_API FSavedMove_VRBaseCharacter : public FSavedMove_Character
 {
 
 public:
-
-	EVRConjoinedMovementModes VRReplicatedMovementMode;
-
-	FVector VRCapsuleLocation;
-	FVector LFDiff;
-	FRotator VRCapsuleRotation;
-	FVRConditionalMoveRep ConditionalValues;
-
-	void Clear();
-	virtual void SetInitialPosition(ACharacter* C);
-
+	// Constructor 
 	FSavedMove_VRBaseCharacter() : FSavedMove_Character()
 	{
 		VRCapsuleLocation = FVector::ZeroVector;
@@ -466,29 +482,8 @@ public:
 		VRReplicatedMovementMode = EVRConjoinedMovementModes::C_MOVE_MAX;// _None;
 	}
 
-	virtual uint8 GetCompressedFlags() const override
-	{
-		// Fills in 01 and 02 for Jump / Crouch
-		uint8 Result = FSavedMove_Character::GetCompressedFlags();
-
-		// Not supporting custom movement mode directly at this time by replicating custom index
-		// We use 4 bits for this so a maximum of 16 elements
-		Result |= (uint8)VRReplicatedMovementMode << 2;
-
-		// This takes up custom_2
-		/*if (bWantsToSnapTurn)
-		{
-			Result |= FLAG_SnapTurn;
-		}*/
-
-		// Reserved_1, and Reserved_2, Flag_Custom_0 and Flag_Custom_1 are used up
-		// By the VRReplicatedMovementMode packing
-
-
-		// only custom_2 and custom_3 are left currently
-		return Result;
-	}
-
+	// Functions
+	
 	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* Character, float MaxDelta) const override
 	{
 		FSavedMove_VRBaseCharacter * nMove = (FSavedMove_VRBaseCharacter *)NewMove.Get();
@@ -516,14 +511,40 @@ public:
 		return FSavedMove_Character::CanCombineWith(NewMove, Character, MaxDelta);
 	}
 
+	void Clear();
 
+	virtual void CombineWith(const FSavedMove_Character* OldMove, ACharacter* InCharacter, APlayerController* PC, const FVector& OldStartLocation) override;
+
+	virtual uint8 GetCompressedFlags() const override
+	{
+		// Fills in 01 and 02 for Jump / Crouch
+		uint8 Result = FSavedMove_Character::GetCompressedFlags();
+
+		// Not supporting custom movement mode directly at this time by replicating custom index
+		// We use 4 bits for this so a maximum of 16 elements
+		Result |= (uint8)VRReplicatedMovementMode << 2;
+
+		// This takes up custom_2
+		/*if (bWantsToSnapTurn)
+		{
+			Result |= FLAG_SnapTurn;
+		}*/
+
+		// Reserved_1, and Reserved_2, Flag_Custom_0 and Flag_Custom_1 are used up
+		// By the VRReplicatedMovementMode packing
+
+
+		// only custom_2 and custom_3 are left currently
+		return Result;
+	}
+	
 	virtual bool IsImportantMove(const FSavedMovePtr& LastAckedMove) const override
 	{
 		// Auto important if toggled climbing
 		if (VRReplicatedMovementMode != EVRConjoinedMovementModes::C_MOVE_MAX)//_None)
 			return true;
 
-		if (!ConditionalValues.CustomVRInputVector.IsZero())	
+		if (!ConditionalValues.CustomVRInputVector.IsZero())
 			return true;
 
 		if (!ConditionalValues.RequestedVelocity.IsZero())
@@ -541,11 +562,21 @@ public:
 		return FSavedMove_Character::IsImportantMove(LastAckedMove);
 	}
 
-	virtual void PrepMoveFor(ACharacter* Character) override;
-	virtual void CombineWith(const FSavedMove_Character* OldMove, ACharacter* InCharacter, APlayerController* PC, const FVector& OldStartLocation) override;
-
 	/** Set the properties describing the final position, etc. of the moved pawn. */
 	virtual void PostUpdate(ACharacter* C, EPostUpdateMode PostUpdateMode) override;
+
+	virtual void PrepMoveFor(ACharacter* Character) override;
+	   	
+	virtual void SetInitialPosition(ACharacter* C);
+	
+	// Declares
+
+	FVRConditionalMoveRep ConditionalValues;
+	FVector LFDiff;
+	FVector VRCapsuleLocation;
+	FRotator VRCapsuleRotation;
+	EVRConjoinedMovementModes VRReplicatedMovementMode;
+
 };
 
 // Using this fixes the problem where the character capsule isn't reset after a scoped movement update revert (pretty much just in StepUp operations)
@@ -566,259 +597,18 @@ class VREXPANSIONPLUGIN_API UVRBaseCharacterMovementComponent : public UCharacte
 {
 	GENERATED_BODY()
 public:
-
+	// Constructor 
 	UVRBaseCharacterMovementComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	virtual void PerformMovement(float DeltaSeconds) override;
-	//virtual void ReplicateMoveToServer(float DeltaTime, const FVector& NewAcceleration) override;
-
-	// Overriding this to run the seated logic
-	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
-
-	// Skip force updating position if we are seated.
-	virtual bool ForcePositionUpdate(float DeltaTime) override;
-
-	// Adding seated transition
-	void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
-
-	// Called when a valid climbing step up movement is found, if bound to the default auto step up is not performed to let custom step up logic happen instead.
-	UPROPERTY(BlueprintAssignable, Category = "VRMovement")
-		FVROnPerformClimbingStepUp OnPerformClimbingStepUp;
-
-	virtual void OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result);
-
-	// Can't be inline anymore
-	FVector GetActorFeetLocationVR() const;
-
-	FORCEINLINE bool HasRequestedVelocity()
-	{
-		return bHasRequestedVelocity;
-	}
-
-	void SetHasRequestedVelocity(bool bNewHasRequestedVelocity);
-	bool IsClimbing() const;
-
-	// Sets the crouching half height since it isn't exposed during runtime to blueprints
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void SetCrouchedHalfHeight(float NewCrouchedHalfHeight);
-
-	// Setting this higher will divide the wall slide effect by this value, to reduce collision sliding.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement", meta = (ClampMin = "0.0", UIMin = "0", ClampMax = "5.0", UIMax = "5"))
-		float VRWallSlideScaler;
-
-	/** Custom version of SlideAlongSurface that handles different movement modes separately; namely during walking physics we might not want to slide up slopes. */
-	virtual float SlideAlongSurface(const FVector& Delta, float Time, const FVector& Normal, FHitResult& Hit, bool bHandleImpact) override;
-
+	// Functions
+		
 	// Add in the custom replicated movement that climbing mode uses, this is a cutom vector that is applied to character movements
 	// on the next tick as a movement input..
 	UFUNCTION(BlueprintCallable, Category = "BaseVRCharacterMovementComponent|VRLocations")
 		void AddCustomReplicatedMovement(FVector Movement);
 
-	// Perform a snap turn in line with the move action system
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_SnapTurn(float SnapTurnDeltaYaw);
-
-	// Perform a rotation set in line with the move actions system
-	// This node specifically sets the FACING direction to a value, where your HMD is pointed
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_SetRotation(float NewYaw);
-
-	// Perform a teleport in line with the move action system
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_Teleport(FVector TeleportLocation, FRotator TeleportRotation, bool bSkipEncroachmentCheck = false);
-
-	// Perform StopAllMovementImmediately in line with the move action system
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_StopAllMovement();
-	
-	// Perform a custom moveaction that you define, will call the OnCustomMoveActionPerformed event in the character when processed so you can run your own logic
-	// Be sure to set the minimum data replication requirements for your move action in order to save on replication.
-	// Move actions are currently limited to 1 per frame.
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_Custom(EVRMoveAction MoveActionToPerform, EVRMoveActionDataReq DataRequirementsForMoveAction, FVector MoveActionVector, FRotator MoveActionRotator);
-
-	FVRMoveActionArray MoveActionArray;
-
-	bool CheckForMoveAction();
-	bool DoMASnapTurn(FVRMoveActionContainer& MoveAction);
-	bool DoMASetRotation(FVRMoveActionContainer& MoveAction);
-	bool DoMATeleport(FVRMoveActionContainer& MoveAction);
-	bool DoMAStopAllMovement(FVRMoveActionContainer& MoveAction);
-
-	FVector CustomVRInputVector;
-	FVector AdditionalVRInputVector;
-	FVector LastPreAdditiveVRVelocity;
-	bool bApplyAdditionalVRInputVectorAsNegative;
-	
-	// Rewind the relative movement that we had with the HMD
-	inline void RewindVRRelativeMovement()
-	{
-		if (bApplyAdditionalVRInputVectorAsNegative)
-		{
-			//FHitResult AHit;
-			MoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false);
-		}
-		//SafeMoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false, AHit);
-	}
-
-	// Rewind the relative movement that we had with the HMD, this is exposed to Blueprint so that custom movement modes can use it to rewind prior to movement actions.
-	// Returns the Vector required to get back to the original position (for custom movement modes)
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		FVector RewindVRMovement();
-
-	// Gets the current CustomInputVector for use in custom movement modes
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		FVector GetCustomInputVector();
-
-	bool bWasInPushBack;
-	bool bIsInPushBack;
-	void StartPushBackNotification(FHitResult HitResult);
-	void EndPushBackNotification();
-
-	//virtual void SendClientAdjustment() override;
-
-	virtual bool VerifyClientTimeStamp(float TimeStamp, FNetworkPredictionData_Server_Character & ServerData) override;
-
-	inline void ApplyVRMotionToVelocity(float deltaTime)
-	{
-		if (AdditionalVRInputVector.IsNearlyZero())
-		{
-			LastPreAdditiveVRVelocity = FVector::ZeroVector;
-			return;
-		}
-		
-		LastPreAdditiveVRVelocity = (AdditionalVRInputVector) / deltaTime;// Velocity; // Save off pre-additive Velocity for restoration next tick	
-		Velocity += LastPreAdditiveVRVelocity;
-	}
-
-	inline void RestorePreAdditiveVRMotionVelocity()
-	{
-		Velocity -= LastPreAdditiveVRVelocity;
-		LastPreAdditiveVRVelocity = FVector::ZeroVector;
-	}
-
-	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
-	virtual void PhysCustom_Climbing(float deltaTime, int32 Iterations);
-	virtual void PhysCustom_LowGrav(float deltaTime, int32 Iterations);
-
-
-	// Skip updates with rotational differences
-	virtual void SmoothCorrection(const FVector& OldLocation, const FQuat& OldRotation, const FVector& NewLocation, const FQuat& NewRotation) override;
-
-	/**
-	* Smooth mesh location for network interpolation, based on values set up by SmoothCorrection.
-	* Internally this simply calls SmoothClientPosition_Interpolate() then SmoothClientPosition_UpdateVisuals().
-	* This function is not called when bNetworkSmoothingComplete is true.
-	* @param DeltaSeconds Time since last update.
-	*/
-	virtual void SmoothClientPosition(float DeltaSeconds) override;
-
-	/** Update mesh location based on interpolated values. */
-	void SmoothClientPosition_UpdateVRVisuals();
-
-	// Added in 4.16
-	///* Allow custom handling when character hits a wall while swimming. */
-	//virtual void HandleSwimmingWallHit(const FHitResult& Hit, float DeltaTime);
-
-	// If true will never count a physicsbody channel component as the floor, to prevent jitter / physics problems.
-	// Make sure that you set simulating objects to the physics body channel if you want this to work correctly
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
-		bool bIgnoreSimulatingComponentsInFloorCheck;
-
-	// If true will run the control rotation in the CMC instead of in the player controller
-	// This puts the player rotation into the scoped movement (perf savings) and also ensures it is properly rotated prior to movement
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
-		bool bRunControlRotationInMovementComponent;
-
-	// Moved into compute floor dist
-	// Option to Skip simulating components when looking for floor
-	/*virtual bool FloorSweepTest(
-		const FVector& Start,
-		FHitResult& OutHit,
-		const FVector& End,
-		ECollisionChannel TraceChannel,
-		const struct FCollisionShape& CollisionShape,
-		const struct FCollisionQueryParams& Params,
-		const struct FCollisionResponseParams& ResponseParam
-	) const override;*/
-
-	virtual void ComputeFloorDist(const FVector& CapsuleLocation, float LineDistance, float SweepDistance, FFindFloorResult& OutFloorResult, float SweepRadius, const FHitResult* DownwardSweepResult = NULL) const override;
-
-	// Need to use actual capsule location for step up
-	virtual bool VRClimbStepUp(const FVector& GravDir, const FVector& Delta, const FHitResult &InHit, FStepDownResult* OutStepDownResult = nullptr);
-
-	// Height to auto step up
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		float VRClimbingStepHeight;
-
-	/* Custom distance that is required before accepting a climbing stepup
-	*  This is to help with cases where head wobble causes falling backwards
-	*  Do NOT set to larger than capsule radius!
-	*  #TODO: Port to SimpleCharacter as well
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		float VRClimbingEdgeRejectDistance;
-
-	// Higher values make it easier to trigger a step up onto a platform and moves you farther in to the base *DEFUNCT*
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		float VRClimbingStepUpMultiplier;
-
-	// If true will clamp the maximum movement on climbing step up to: VRClimbingStepUpMaxSize
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		bool bClampClimbingStepUp;
-
-	// Maximum X/Y vector size to use when climbing stepping up (prevents very deep step ups from large movements).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		float VRClimbingStepUpMaxSize;
-
-	// If true will automatically set falling when a stepup occurs during climbing
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		bool SetDefaultPostClimbMovementOnStepUp;
-
-	// Max velocity on releasing a climbing grip
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		float VRClimbingMaxReleaseVelocitySize;
-
-	/* Custom distance that is required before accepting a walking stepup
-	*  This is to help promote stepping up, engine default is 0.15f, generally you want it lower than that
-	*  Do NOT set to larger than capsule radius!
-	*  #TODO: Port to SimpleCharacter as well
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
-		float VREdgeRejectDistance;
-
-	UFUNCTION(BlueprintCallable, Category = "VRMovement|Climbing")
-		void SetClimbingMode(bool bIsClimbing);
-
-	// Default movement mode to switch to post climb ended, only used if SetDefaultPostClimbMovementOnStepUp is true
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
-		EVRConjoinedMovementModes DefaultPostClimbMovement;
-
 	// Overloading this to handle an edge case
 	virtual void ApplyNetworkMovementMode(const uint8 ReceivedMode) override;
-
-	/*
-	* This is called client side to make a replicated movement mode change that hits the server in the saved move.
-	*
-	* Custom Movement Mode is currently limited to 0 - 8, the index's 0 and 1 are currently used up for the plugin movement modes.
-	* So setting it to 0 or 1 would be Climbing, and LowGrav respectivly, this leaves 2-8 as open index's for use.
-	* For a total of 6 Custom movement modes past the currently implemented plugin ones.
-	*/
-	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void SetReplicatedMovementMode(EVRConjoinedMovementModes NewMovementMode);
-
-	/*
-	* Call this to convert the current movement mode to a Conjoined one for reference
-	*
-	* Custom Movement Mode is currently limited to 0 - 8, the index's 0 and 1 are currently used up for the plugin movement modes.
-	* So setting it to 0 or 1 would be Climbing, and LowGrav respectivly, this leaves 2-8 as open index's for use.
-	* For a total of 6 Custom movement modes past the currently implemented plugin ones.
-	*/
-	UFUNCTION(BlueprintPure, Category = "VRMovement")
-		EVRConjoinedMovementModes GetReplicatedMovementMode();
-
-	// We use 4 bits for this so a maximum of 16 elements
-	EVRConjoinedMovementModes VRReplicatedMovementMode;
 
 	FORCEINLINE void ApplyReplicatedMovementMode(EVRConjoinedMovementModes &NewMovementMode, bool bClearMovementMode = false)
 	{
@@ -837,26 +627,195 @@ public:
 
 			// Clearing it here instead now, as this way the code can inject it during PerformMovement
 			// Specifically used by the Climbing Step up, so that server rollbacks are supported
-			if(bClearMovementMode)
+			if (bClearMovementMode)
 				NewMovementMode = EVRConjoinedMovementModes::C_MOVE_MAX;//None;
 		}
 	}
+	
+	inline void ApplyVRMotionToVelocity(float deltaTime)
+	{
+		if (AdditionalVRInputVector.IsNearlyZero())
+		{
+			LastPreAdditiveVRVelocity = FVector::ZeroVector;
+			return;
+		}
 
-	void UpdateFromCompressedFlags(uint8 Flags) override;
+		LastPreAdditiveVRVelocity = (AdditionalVRInputVector) / deltaTime;// Velocity; // Save off pre-additive Velocity for restoration next tick	
+		Velocity += LastPreAdditiveVRVelocity;
+	}
+	
+	bool CheckForMoveAction();
+
+	virtual void ComputeFloorDist(const FVector& CapsuleLocation, float LineDistance, float SweepDistance, FFindFloorResult& OutFloorResult, float SweepRadius, const FHitResult* DownwardSweepResult = NULL) const override;
+
+	bool DoMASetRotation(FVRMoveActionContainer& MoveAction);
+
+	bool DoMASnapTurn(FVRMoveActionContainer& MoveAction);
+
+	bool DoMAStopAllMovement(FVRMoveActionContainer& MoveAction);
+
+	bool DoMATeleport(FVRMoveActionContainer& MoveAction);
+	
+	void EndPushBackNotification();
+	
+	// Skip force updating position if we are seated.
+	virtual bool ForcePositionUpdate(float DeltaTime) override;
+
+	// Can't be inline anymore
+	FVector GetActorFeetLocationVR() const;
+
+	// Gets the current CustomInputVector for use in custom movement modes
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		FVector GetCustomInputVector();
+	
+	/*
+	* Call this to convert the current movement mode to a Conjoined one for reference
+	*
+	* Custom Movement Mode is currently limited to 0 - 8, the index's 0 and 1 are currently used up for the plugin movement modes.
+	* So setting it to 0 or 1 would be Climbing, and LowGrav respectivly, this leaves 2-8 as open index's for use.
+	* For a total of 6 Custom movement modes past the currently implemented plugin ones.
+	*/
+	UFUNCTION(BlueprintPure, Category = "VRMovement")
+		EVRConjoinedMovementModes GetReplicatedMovementMode();
+
+	FORCEINLINE bool HasRequestedVelocity()
+	{
+		return bHasRequestedVelocity;
+	}
+
+	bool IsClimbing() const;
+	   
+	virtual void OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result);
+
+	// Adding seated transition
+	void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
+	
+	// Perform a custom moveaction that you define, will call the OnCustomMoveActionPerformed event in the character when processed so you can run your own logic
+	// Be sure to set the minimum data replication requirements for your move action in order to save on replication.
+	// Move actions are currently limited to 1 per frame.
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void PerformMoveAction_Custom(EVRMoveAction MoveActionToPerform, EVRMoveActionDataReq DataRequirementsForMoveAction, FVector MoveActionVector, FRotator MoveActionRotator);
+
+	// Perform a rotation set in line with the move actions system
+	// This node specifically sets the FACING direction to a value, where your HMD is pointed
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void PerformMoveAction_SetRotation(float NewYaw);
+
+	// Perform a snap turn in line with the move action system
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void PerformMoveAction_SnapTurn(float SnapTurnDeltaYaw);
+
+	// Perform StopAllMovementImmediately in line with the move action system
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void PerformMoveAction_StopAllMovement();
+
+	// Perform a teleport in line with the move action system
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void PerformMoveAction_Teleport(FVector TeleportLocation, FRotator TeleportRotation, bool bSkipEncroachmentCheck = false);
+	
+	virtual void PerformMovement(float DeltaSeconds) override;
+
+	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
+	
+	virtual void PhysCustom_Climbing(float deltaTime, int32 Iterations);
+	
+	virtual void PhysCustom_LowGrav(float deltaTime, int32 Iterations);
+
+	//virtual void ReplicateMoveToServer(float DeltaTime, const FVector& NewAcceleration) override;
+
+	inline void RestorePreAdditiveVRMotionVelocity()
+	{
+		Velocity -= LastPreAdditiveVRVelocity;
+		LastPreAdditiveVRVelocity = FVector::ZeroVector;
+	}
+	   	
+	// Rewind the relative movement that we had with the HMD, this is exposed to Blueprint so that custom movement modes can use it to rewind prior to movement actions.
+	// Returns the Vector required to get back to the original position (for custom movement modes)
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		FVector RewindVRMovement();
+
+	// Rewind the relative movement that we had with the HMD
+	inline void RewindVRRelativeMovement()
+	{
+		if (bApplyAdditionalVRInputVectorAsNegative)
+		{
+			//FHitResult AHit;
+			MoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false);
+		}
+		//SafeMoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false, AHit);
+	}
 
 	FVector RoundDirectMovement(FVector InMovement) const;
+	
+	UFUNCTION(BlueprintCallable, Category = "VRMovement|Climbing")
+		void SetClimbingMode(bool bIsClimbing);
 
-	// Setting this below 1.0 will change how fast you de-accelerate when touching a wall
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|LowGrav", meta = (ClampMin = "0.0", UIMin = "0", ClampMax = "5.0", UIMax = "5"))
-		float VRLowGravWallFrictionScaler;
+	// Sets the crouching half height since it isn't exposed during runtime to blueprints
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void SetCrouchedHalfHeight(float NewCrouchedHalfHeight);
 
-	// If true then low grav will ignore the default physics volume fluid friction, useful if you have a mix of low grav and normal movement
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|LowGrav")
-		bool VRLowGravIgnoresDefaultFluidFriction;
+	void SetHasRequestedVelocity(bool bNewHasRequestedVelocity);
+	
+	/*
+	* This is called client side to make a replicated movement mode change that hits the server in the saved move.
+	*
+	* Custom Movement Mode is currently limited to 0 - 8, the index's 0 and 1 are currently used up for the plugin movement modes.
+	* So setting it to 0 or 1 would be Climbing, and LowGrav respectivly, this leaves 2-8 as open index's for use.
+	* For a total of 6 Custom movement modes past the currently implemented plugin ones.
+	*/
+	UFUNCTION(BlueprintCallable, Category = "VRMovement")
+		void SetReplicatedMovementMode(EVRConjoinedMovementModes NewMovementMode);
+
+	/** Custom version of SlideAlongSurface that handles different movement modes separately; namely during walking physics we might not want to slide up slopes. */
+	virtual float SlideAlongSurface(const FVector& Delta, float Time, const FVector& Normal, FHitResult& Hit, bool bHandleImpact) override;
+	
+	/**
+	* Smooth mesh location for network interpolation, based on values set up by SmoothCorrection.
+	* Internally this simply calls SmoothClientPosition_Interpolate() then SmoothClientPosition_UpdateVisuals().
+	* This function is not called when bNetworkSmoothingComplete is true.
+	* @param DeltaSeconds Time since last update.
+	*/
+	virtual void SmoothClientPosition(float DeltaSeconds) override;
+
+	/** Update mesh location based on interpolated values. */
+	void SmoothClientPosition_UpdateVRVisuals();
+
+	// Skip updates with rotational differences
+	virtual void SmoothCorrection(const FVector& OldLocation, const FQuat& OldRotation, const FVector& NewLocation, const FQuat& NewRotation) override;
+	
+	void StartPushBackNotification(FHitResult HitResult);
+	
+	//virtual void SendClientAdjustment() override;
+
+	// Overriding this to run the seated logic
+	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
+	
+	void UpdateFromCompressedFlags(uint8 Flags) override;
+
+	virtual bool VerifyClientTimeStamp(float TimeStamp, FNetworkPredictionData_Server_Character & ServerData) override;
+	   
+	// Added in 4.16
+	///* Allow custom handling when character hits a wall while swimming. */
+	//virtual void HandleSwimmingWallHit(const FHitResult& Hit, float DeltaTime);
+
+	// Moved into compute floor dist
+	// Option to Skip simulating components when looking for floor
+	/*virtual bool FloorSweepTest(
+		const FVector& Start,
+		FHitResult& OutHit,
+		const FVector& End,
+		ECollisionChannel TraceChannel,
+		const struct FCollisionShape& CollisionShape,
+		const struct FCollisionQueryParams& Params,
+		const struct FCollisionResponseParams& ResponseParam
+	) const override;*/
+
+	// Need to use actual capsule location for step up
+	virtual bool VRClimbStepUp(const FVector& GravDir, const FVector& Delta, const FHitResult &InHit, FStepDownResult* OutStepDownResult = nullptr); 
 
 	/** Replicate position correction to client, associated with a timestamped servermove.  Client will replay subsequent moves after applying adjustment.  */
 	UFUNCTION(unreliable, client)
-		virtual void ClientAdjustPosition(float TimeStamp, FVector NewLoc, FVector NewVel, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
+	virtual void ClientAdjustPosition(float TimeStamp, FVector NewLoc, FVector NewVel, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
 	virtual void ClientAdjustPosition_Implementation(float TimeStamp, FVector NewLoc, FVector NewVel, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override
 	{
 		//this->CustomVRInputVector = FVector::ZeroVector;
@@ -873,5 +832,94 @@ public:
 
 		Super::ClientVeryShortAdjustPosition_Implementation(TimeStamp, NewLoc, NewBase, NewBaseBoneName, bHasBase, bBaseRelativePosition, ServerMovementMode);
 	}
+
+	// Declares
+
+	bool bApplyAdditionalVRInputVectorAsNegative;
+	
+	// If true will clamp the maximum movement on climbing step up to: VRClimbingStepUpMaxSize
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		bool bClampClimbingStepUp;
+
+	// If true will never count a physicsbody channel component as the floor, to prevent jitter / physics problems.
+	// Make sure that you set simulating objects to the physics body channel if you want this to work correctly
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
+		bool bIgnoreSimulatingComponentsInFloorCheck;
+
+	bool bIsInPushBack;
+
+	// If true will run the control rotation in the CMC instead of in the player controller
+	// This puts the player rotation into the scoped movement (perf savings) and also ensures it is properly rotated prior to movement
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
+		bool bRunControlRotationInMovementComponent;
+
+	bool bWasInPushBack;
+
+	FVector AdditionalVRInputVector;
+
+	FVector CustomVRInputVector;
+
+	// Default movement mode to switch to post climb ended, only used if SetDefaultPostClimbMovementOnStepUp is true
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		EVRConjoinedMovementModes DefaultPostClimbMovement;
+
+	FVector LastPreAdditiveVRVelocity;
+
+	FVRMoveActionArray MoveActionArray;
+
+	// Called when a valid climbing step up movement is found, if bound to the default auto step up is not performed to let custom step up logic happen instead.
+	UPROPERTY(BlueprintAssignable, Category = "VRMovement")
+		FVROnPerformClimbingStepUp OnPerformClimbingStepUp;
+	
+	// If true will automatically set falling when a stepup occurs during climbing
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		bool SetDefaultPostClimbMovementOnStepUp;
+
+	// Setting this higher will divide the wall slide effect by this value, to reduce collision sliding.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement", meta = (ClampMin = "0.0", UIMin = "0", ClampMax = "5.0", UIMax = "5"))
+		float VRWallSlideScaler;
+
+	/* Custom distance that is required before accepting a climbing stepup
+	*  This is to help with cases where head wobble causes falling backwards
+	*  Do NOT set to larger than capsule radius!
+	*  #TODO: Port to SimpleCharacter as well
+	*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		float VRClimbingEdgeRejectDistance;
+
+	// Max velocity on releasing a climbing grip
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		float VRClimbingMaxReleaseVelocitySize;
+
+	// Height to auto step up
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		float VRClimbingStepHeight;
+
+	// Maximum X/Y vector size to use when climbing stepping up (prevents very deep step ups from large movements).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		float VRClimbingStepUpMaxSize;
+	   
+	// Higher values make it easier to trigger a step up onto a platform and moves you farther in to the base *DEFUNCT*
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
+		float VRClimbingStepUpMultiplier;
+	   
+	/* Custom distance that is required before accepting a walking stepup
+	*  This is to help promote stepping up, engine default is 0.15f, generally you want it lower than that
+	*  Do NOT set to larger than capsule radius!
+	*  #TODO: Port to SimpleCharacter as well
+	*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
+		float VREdgeRejectDistance;
+	   
+	// If true then low grav will ignore the default physics volume fluid friction, useful if you have a mix of low grav and normal movement
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|LowGrav")
+		bool VRLowGravIgnoresDefaultFluidFriction;
+
+	// Setting this below 1.0 will change how fast you de-accelerate when touching a wall
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|LowGrav", meta = (ClampMin = "0.0", UIMin = "0", ClampMax = "5.0", UIMax = "5"))
+		float VRLowGravWallFrictionScaler;
+	   
+	// We use 4 bits for this so a maximum of 16 elements
+	EVRConjoinedMovementModes VRReplicatedMovementMode;
 };
 

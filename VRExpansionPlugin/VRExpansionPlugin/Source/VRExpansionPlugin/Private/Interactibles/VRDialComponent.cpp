@@ -1,9 +1,21 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Interactibles/VRDialComponent.h"
+
+// Unreal
 #include "Net/UnrealNetwork.h"
 
-  //=============================================================================
+// VREP
+
+
+// UVRDialComponent
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 UVRDialComponent::UVRDialComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -48,6 +60,16 @@ UVRDialComponent::~UVRDialComponent()
 {
 }
 
+// Functions
+
+void UVRDialComponent::BeginPlay()
+{
+	// Call the base class 
+	Super::BeginPlay();
+	CalculateDialProgress();
+
+	bOriginalReplicatesMovement = bReplicateMovement;
+}
 
 void UVRDialComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
 {
@@ -61,6 +83,12 @@ void UVRDialComponent::GetLifetimeReplicatedProps(TArray< class FLifetimePropert
 	DOREPLIFETIME_CONDITION(UVRDialComponent, GameplayTags, COND_Custom);
 }
 
+void UVRDialComponent::OnRegister()
+{
+	Super::OnRegister();
+	ResetInitialDialLocation(); // Load the original dial location
+}
+
 void UVRDialComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
 {
 	Super::PreReplication(ChangedPropertyTracker);
@@ -71,21 +99,6 @@ void UVRDialComponent::PreReplication(IRepChangedPropertyTracker & ChangedProper
 	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
 	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
 	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
-}
-
-void UVRDialComponent::OnRegister()
-{
-	Super::OnRegister();
-	ResetInitialDialLocation(); // Load the original dial location
-}
-
-void UVRDialComponent::BeginPlay()
-{
-	// Call the base class 
-	Super::BeginPlay();
-	CalculateDialProgress();
-
-	bOriginalReplicatesMovement = bReplicateMovement;
 }
 
 void UVRDialComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
@@ -112,37 +125,80 @@ void UVRDialComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, 
 	}
 }
 
-void UVRDialComponent::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime) 
+// UVRDialComponent Implementation.
+
+FBPAdvGripSettings UVRDialComponent::AdvancedGripSettings_Implementation()
 {
+	return FBPAdvGripSettings(GripPriority);
+}
 
-	// #TODO: Should this use a pivot rotation? it wouldn't make that much sense to me?
-	float DeltaRot = 0.0f;
+bool UVRDialComponent::AllowsMultipleGrips_Implementation()
+{
+	return false;
+}
 
-	if (!bDialUseDirectHandRotation)
+void UVRDialComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
+{
+	bHadSlotInRange = false;
+}
+
+bool UVRDialComponent::DenyGripping_Implementation()
+{
+	return bDenyGripping;
+}
+
+bool UVRDialComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
+{
+	return false;
+}
+
+void UVRDialComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
+{
+	GripStiffnessOut = 0.0f;
+	GripDampingOut = 0.0f;
+}
+
+EGripCollisionType UVRDialComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
+{
+	return EGripCollisionType::CustomGrip;
+}
+
+float UVRDialComponent::GripBreakDistance_Implementation()
+{
+	return BreakDistance;
+}
+
+EGripLateUpdateSettings UVRDialComponent::GripLateUpdateSetting_Implementation()
+{
+	return EGripLateUpdateSettings::LateUpdatesAlwaysOff;
+}
+
+EGripMovementReplicationSettings UVRDialComponent::GripMovementReplicationType_Implementation()
+{
+	return MovementReplicationSetting;
+}
+
+void UVRDialComponent::IsHeld_Implementation(TArray<FBPGripPair> & CurHoldingControllers, bool & bCurIsHeld)
+{
+	CurHoldingControllers.Empty();
+	if (HoldingGrip.IsValid())
 	{
-		FTransform CurrentRelativeTransform = InitialRelativeTransform * UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
-		FVector CurInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(GrippingController->GetPivotLocation());
-		
-		float NewRot = FRotator::ClampAxis(UVRInteractibleFunctionLibrary::GetAtan2Angle(DialRotationAxis, CurInteractorLocation));
-		DeltaRot = RotationScaler * (NewRot - LastGripRot);
-		LastGripRot = NewRot;
+		CurHoldingControllers.Add(HoldingGrip);
+		bCurIsHeld = bIsHeld;
 	}
 	else
 	{
-		FRotator curRotation = GrippingController->GetComponentRotation();
-		DeltaRot = RotationScaler * UVRInteractibleFunctionLibrary::GetAxisValue(InteractorRotationAxis, (curRotation - LastRotation).GetNormalized());
-		LastRotation = curRotation;
-	}
-
-	AddDialAngle(DeltaRot, true);
-
-	// Handle the auto drop
-	if (BreakDistance > 0.f && GrippingController->HasGripAuthority(GripInformation) && FVector::DistSquared(InitialDropLocation, this->GetComponentTransform().InverseTransformPosition(GrippingController->GetPivotLocation())) >= FMath::Square(BreakDistance))
-	{
-		GrippingController->DropObjectByInterface(this, HoldingGrip.GripID);
-		return;
+		bCurIsHeld = false;
 	}
 }
+
+void UVRDialComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
+
+void UVRDialComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
+
+void UVRDialComponent::OnEndUsed_Implementation() {}
+
+void UVRDialComponent::OnEndSecondaryUsed_Implementation() {}
 
 void UVRDialComponent::OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) 
 {
@@ -188,121 +244,21 @@ void UVRDialComponent::OnGripRelease_Implementation(UGripMotionControllerCompone
 		this->SetComponentTickEnabled(false);
 }
 
-void UVRDialComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
-void UVRDialComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
-void UVRDialComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRDialComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRDialComponent::OnUsed_Implementation() {}
-void UVRDialComponent::OnEndUsed_Implementation() {}
-void UVRDialComponent::OnSecondaryUsed_Implementation() {}
-void UVRDialComponent::OnEndSecondaryUsed_Implementation() {}
 void UVRDialComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
+
+void UVRDialComponent::OnUsed_Implementation() {}
+
+void UVRDialComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+
+void UVRDialComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+
+void UVRDialComponent::OnSecondaryUsed_Implementation() {}
+
 bool UVRDialComponent::RequestsSocketing_Implementation(USceneComponent *& ParentToSocketTo, FName & OptionalSocketName, FTransform_NetQuantize & RelativeTransform) { return false; }
-
-bool UVRDialComponent::DenyGripping_Implementation()
-{
-	return bDenyGripping;
-}
-
-EGripInterfaceTeleportBehavior UVRDialComponent::TeleportBehavior_Implementation()
-{
-	return EGripInterfaceTeleportBehavior::DropOnTeleport;
-}
-
-bool UVRDialComponent::SimulateOnDrop_Implementation()
-{
-	return false;
-}
-
-/*EGripCollisionType UVRDialComponent::SlotGripType_Implementation()
-{
-	return EGripCollisionType::CustomGrip;
-}
-
-EGripCollisionType UVRDialComponent::FreeGripType_Implementation()
-{
-	return EGripCollisionType::CustomGrip;
-}*/
-
-EGripCollisionType UVRDialComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
-{
-	return EGripCollisionType::CustomGrip;
-}
 
 ESecondaryGripType UVRDialComponent::SecondaryGripType_Implementation()
 {
 	return ESecondaryGripType::SG_None;
-}
-
-
-EGripMovementReplicationSettings UVRDialComponent::GripMovementReplicationType_Implementation()
-{
-	return MovementReplicationSetting;
-}
-
-EGripLateUpdateSettings UVRDialComponent::GripLateUpdateSetting_Implementation()
-{
-	return EGripLateUpdateSettings::LateUpdatesAlwaysOff;
-}
-
-/*float UVRDialComponent::GripStiffness_Implementation()
-{
-	return 1500.0f;
-}
-
-float UVRDialComponent::GripDamping_Implementation()
-{
-	return 200.0f;
-}*/
-
-void UVRDialComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
-{
-	GripStiffnessOut = 0.0f;
-	GripDampingOut = 0.0f;
-}
-
-FBPAdvGripSettings UVRDialComponent::AdvancedGripSettings_Implementation()
-{
-	return FBPAdvGripSettings(GripPriority);
-}
-
-float UVRDialComponent::GripBreakDistance_Implementation()
-{
-	return BreakDistance;
-}
-
-/*void UVRDialComponent::ClosestSecondarySlotInRange_Implementation(FVector WorldLocation, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
-{
-	bHadSlotInRange = false;
-}
-
-void UVRDialComponent::ClosestPrimarySlotInRange_Implementation(FVector WorldLocation, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
-{
-	bHadSlotInRange = false;
-}*/
-
-void UVRDialComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
-{
-	bHadSlotInRange = false;
-}
-
-bool UVRDialComponent::AllowsMultipleGrips_Implementation()
-{
-	return false;
-}
-
-void UVRDialComponent::IsHeld_Implementation(TArray<FBPGripPair> & CurHoldingControllers, bool & bCurIsHeld)
-{
-	CurHoldingControllers.Empty();
-	if (HoldingGrip.IsValid())
-	{
-		CurHoldingControllers.Add(HoldingGrip);
-		bCurIsHeld = bIsHeld;
-	}
-	else
-	{
-		bCurIsHeld = false;
-	}
 }
 
 void UVRDialComponent::SetHeld_Implementation(UGripMotionControllerComponent * NewHoldingController, uint8 GripID, bool bNewIsHeld)
@@ -312,7 +268,7 @@ void UVRDialComponent::SetHeld_Implementation(UGripMotionControllerComponent * N
 		HoldingGrip = FBPGripPair(NewHoldingController, GripID);
 		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
 		{
-			if(!bIsHeld)
+			if (!bIsHeld)
 				bOriginalReplicatesMovement = bReplicateMovement;
 			bReplicateMovement = false;
 		}
@@ -329,21 +285,86 @@ void UVRDialComponent::SetHeld_Implementation(UGripMotionControllerComponent * N
 	bIsHeld = bNewIsHeld;
 }
 
+bool UVRDialComponent::SimulateOnDrop_Implementation()
+{
+	return false;
+}
+
+void UVRDialComponent::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime)
+{
+
+	// #TODO: Should this use a pivot rotation? it wouldn't make that much sense to me?
+	float DeltaRot = 0.0f;
+
+	if (!bDialUseDirectHandRotation)
+	{
+		FTransform CurrentRelativeTransform = InitialRelativeTransform * UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
+		FVector CurInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(GrippingController->GetPivotLocation());
+
+		float NewRot = FRotator::ClampAxis(UVRInteractibleFunctionLibrary::GetAtan2Angle(DialRotationAxis, CurInteractorLocation));
+		DeltaRot = RotationScaler * (NewRot - LastGripRot);
+		LastGripRot = NewRot;
+	}
+	else
+	{
+		FRotator curRotation = GrippingController->GetComponentRotation();
+		DeltaRot = RotationScaler * UVRInteractibleFunctionLibrary::GetAxisValue(InteractorRotationAxis, (curRotation - LastRotation).GetNormalized());
+		LastRotation = curRotation;
+	}
+
+	AddDialAngle(DeltaRot, true);
+
+	// Handle the auto drop
+	if (BreakDistance > 0.f && GrippingController->HasGripAuthority(GripInformation) && FVector::DistSquared(InitialDropLocation, this->GetComponentTransform().InverseTransformPosition(GrippingController->GetPivotLocation())) >= FMath::Square(BreakDistance))
+	{
+		GrippingController->DropObjectByInterface(this, HoldingGrip.GripID);
+		return;
+	}
+}
+
+EGripInterfaceTeleportBehavior UVRDialComponent::TeleportBehavior_Implementation()
+{
+	return EGripInterfaceTeleportBehavior::DropOnTeleport;
+}
+
+/*EGripCollisionType UVRDialComponent::SlotGripType_Implementation()
+{
+	return EGripCollisionType::CustomGrip;
+}
+
+EGripCollisionType UVRDialComponent::FreeGripType_Implementation()
+{
+	return EGripCollisionType::CustomGrip;
+}*/
+
+/*float UVRDialComponent::GripStiffness_Implementation()
+{
+	return 1500.0f;
+}
+
+float UVRDialComponent::GripDamping_Implementation()
+{
+	return 200.0f;
+}*/
+
+
+/*void UVRDialComponent::ClosestSecondarySlotInRange_Implementation(FVector WorldLocation, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
+{
+	bHadSlotInRange = false;
+}
+
+void UVRDialComponent::ClosestPrimarySlotInRange_Implementation(FVector WorldLocation, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
+{
+	bHadSlotInRange = false;
+}*/
+
+
 /*FBPInteractionSettings UVRDialComponent::GetInteractionSettings_Implementation()
 {
 	return FBPInteractionSettings();
 }*/
 
-bool UVRDialComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
-{
-	return false;
-}
-
-void UVRDialComponent::SetDialAngle(float DialAngle, bool bCallEvents)
-{
-	CurRotBackEnd = DialAngle;
-	AddDialAngle(0.0f);
-}
+// Functions
 
 void UVRDialComponent::AddDialAngle(float DialAngleDelta, bool bCallEvents, bool bSkipSettingRot)
 {
@@ -380,7 +401,7 @@ void UVRDialComponent::AddDialAngle(float DialAngleDelta, bool bCallEvents, bool
 
 	if (bDialUsesAngleSnap && FMath::Abs(FMath::Fmod(CurRotBackEnd, SnapAngleIncrement)) <= FMath::Min(SnapAngleIncrement, SnapAngleThreshold))
 	{
-		if(!bSkipSettingRot)
+		if (!bSkipSettingRot)
 			this->SetRelativeRotation((FTransform(UVRInteractibleFunctionLibrary::SetAxisValueRot(DialRotationAxis, FMath::GridSnap(CurRotBackEnd, SnapAngleIncrement), FRotator::ZeroRotator)) * InitialRelativeTransform).Rotator());
 		CurrentDialAngle = FMath::RoundToFloat(FMath::GridSnap(CurRotBackEnd, SnapAngleIncrement));
 
@@ -394,11 +415,19 @@ void UVRDialComponent::AddDialAngle(float DialAngleDelta, bool bCallEvents, bool
 	}
 	else
 	{
-		if(!bSkipSettingRot)
+		if (!bSkipSettingRot)
 			this->SetRelativeRotation((FTransform(UVRInteractibleFunctionLibrary::SetAxisValueRot(DialRotationAxis, CurRotBackEnd, FRotator::ZeroRotator)) * InitialRelativeTransform).Rotator());
 		CurrentDialAngle = FMath::RoundToFloat(CurRotBackEnd);
 	}
 
+}
+
+void UVRDialComponent::CalculateDialProgress()
+{
+	FTransform CurRelativeTransform = this->GetComponentTransform().GetRelativeTransform(UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this));
+	LastGripRot = UVRInteractibleFunctionLibrary::GetDeltaAngleFromTransforms(DialRotationAxis, InitialRelativeTransform, CurRelativeTransform);
+	CurRotBackEnd = LastGripRot;
+	AddDialAngle(0.0f, false, true);
 }
 
 void UVRDialComponent::ResetInitialDialLocation()
@@ -409,10 +438,8 @@ void UVRDialComponent::ResetInitialDialLocation()
 	CalculateDialProgress();
 }
 
-void UVRDialComponent::CalculateDialProgress()
+void UVRDialComponent::SetDialAngle(float DialAngle, bool bCallEvents)
 {
-	FTransform CurRelativeTransform = this->GetComponentTransform().GetRelativeTransform(UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this));
-	LastGripRot = UVRInteractibleFunctionLibrary::GetDeltaAngleFromTransforms(DialRotationAxis, InitialRelativeTransform, CurRelativeTransform);
-	CurRotBackEnd = LastGripRot;
-	AddDialAngle(0.0f, false, true);
+	CurRotBackEnd = DialAngle;
+	AddDialAngle(0.0f);
 }

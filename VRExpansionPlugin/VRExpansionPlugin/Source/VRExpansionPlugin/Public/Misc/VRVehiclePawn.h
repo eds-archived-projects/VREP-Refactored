@@ -1,12 +1,21 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
+
+// Includes
+
+
+// Unreal
 #include "CoreMinimal.h"
-#include "UObject/ObjectMacros.h"
-#include "GameFramework/Pawn.h"
-#include "Engine/InputDelegateBinding.h"
 #include "Components/InputComponent.h"
+#include "Engine/InputDelegateBinding.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "UObject/ObjectMacros.h"
+
+// VREP
+
+// UHeader Tool
 #include "VRVehiclePawn.generated.h"
 
 
@@ -37,9 +46,48 @@ public:
 		}
 	}*/
 
+	// Functions
+
+
+	UFUNCTION(BlueprintCallable, Category = "Pawn")
+		virtual bool ForceSecondaryPossession(AController * NewController)
+	{
+		if (NewController)
+		{
+			PossessedBy(NewController);
+		}
+		else
+		{
+			UnPossessed();
+		}
+
+		return false;
+		//INetworkPredictionInterface* NetworkPredictionInterface = GetPawn() ? Cast<INetworkPredictionInterface>(GetPawn()->GetMovementComponent()) : NULL;
+		//if (NetworkPredictionInterface)
+		//{
+		//	NetworkPredictionInterface->ResetPredictionData_Server();
+	//	}
+
+
+	// Local PCs will have the Restart() triggered right away in ClientRestart (via PawnClientRestart()), but the server should call Restart() locally for remote PCs.
+	// We're really just trying to avoid calling Restart() multiple times.
+	//	if (!IsLocalPlayerController())
+	//	{
+		//	GetPawn()->Restart();
+	//	}
+	//	ClientRestart(GetPawn());
+
+		//ChangeState(NAME_Playing);
+		//if (bAutoManageActiveCameraTarget)
+		//{
+		//	AutoManageActiveCameraTarget(GetPawn());
+		//	ResetCameraMode();
+		//}
+		//UpdateNavigationComponents();
+	}
 
 	//UFUNCTION()
-		virtual void OnRep_Controller() override
+	virtual void OnRep_Controller() override
 	{
 		if ((Controller != NULL) && (Controller->GetPawn() == NULL))
 		{
@@ -64,7 +112,6 @@ public:
 		}*/
 
 	}
-
 
 	UFUNCTION(BlueprintCallable, Category = "Pawn")
 		virtual bool SetBindToInput(AController * CController, bool bBindToInput)
@@ -117,42 +164,5 @@ public:
 
 		return false;
 	}
-
-	UFUNCTION(BlueprintCallable, Category = "Pawn")
-		virtual bool ForceSecondaryPossession(AController * NewController)
-	{
-		if (NewController)
-		{
-			PossessedBy(NewController);
-		}
-		else
-		{
-			UnPossessed();
-		}
-
-		return false;
-		//INetworkPredictionInterface* NetworkPredictionInterface = GetPawn() ? Cast<INetworkPredictionInterface>(GetPawn()->GetMovementComponent()) : NULL;
-		//if (NetworkPredictionInterface)
-		//{
-		//	NetworkPredictionInterface->ResetPredictionData_Server();
-	//	}
-
-
-	// Local PCs will have the Restart() triggered right away in ClientRestart (via PawnClientRestart()), but the server should call Restart() locally for remote PCs.
-	// We're really just trying to avoid calling Restart() multiple times.
-	//	if (!IsLocalPlayerController())
-	//	{
-		//	GetPawn()->Restart();
-	//	}
-	//	ClientRestart(GetPawn());
-
-		//ChangeState(NAME_Playing);
-		//if (bAutoManageActiveCameraTarget)
-		//{
-		//	AutoManageActiveCameraTarget(GetPawn());
-		//	ResetCameraMode();
-		//}
-		//UpdateNavigationComponents();
-	}
-
+	   
 };

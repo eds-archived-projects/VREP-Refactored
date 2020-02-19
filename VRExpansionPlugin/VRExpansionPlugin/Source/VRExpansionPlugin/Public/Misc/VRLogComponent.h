@@ -2,12 +2,20 @@
 
 #pragma once
 
+// Includes
+
+
+// Unreal
 #include "CoreMinimal.h"
-#include "Engine/Canvas.h"
-#include "Engine/TextureRenderTarget2D.h"
-#include "Engine/Console.h"
-#include "Framework/Text/TextRange.h"
+#include "Containers/UnrealString.h"
 #include "Core/Public/Misc/OutputDeviceHelper.h"
+#include "Engine/Canvas.h"
+#include "Engine/Console.h"
+#include "Engine/TextureRenderTarget2D.h"
+
+// VREP
+
+// UHeader Tool
 #include "VRLogComponent.generated.h"
 
 /**
@@ -199,12 +207,24 @@ class VREXPANSIONPLUGIN_API UVRLogComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	// Constructor & Destructor
 	UVRLogComponent(const FObjectInitializer& ObjectInitializer);
-
-
+	
 	~UVRLogComponent();
 
-	FVROutputLogHistory OutputLogHistory;
+	// Functions
+
+	// Sends text to the console - Optionally returns at the end to "enter" the text, end flashes the cursor
+	UFUNCTION(BlueprintCallable, Category = "VRLogComponent|Console", meta = (bIgnoreSelf = "true"))
+		void AppendTextToConsole(FString Text, bool bReturnAtEnd = false);
+
+	void DrawConsole(bool bLowerHalfOnly, UCanvas* Canvas);
+	   
+	// Draw the console to a render target 2D
+	UFUNCTION(BlueprintCallable, Category = "VRLogComponent|Console", meta = (bIgnoreSelf = "true", DisplayName = "DrawConsoleToCanvasRenderTarget2D"))
+		bool DrawConsoleToRenderTarget2D(EBPVRConsoleDrawType DrawType, UTextureRenderTarget2D * Texture, float ScrollOffset, bool bForceDraw);
+	   	 
+	void DrawOutputLog(bool bUpperHalfOnly, UCanvas* Canvas, float ScrollOffset);
 
 	virtual void PostInitProperties() override
 	{
@@ -212,12 +232,6 @@ public:
 		OutputLogHistory.MaxStoredMessages = FMath::Clamp(MaxStoredMessages, 100, 100000);
 		OutputLogHistory.MaxLineLength = FMath::Clamp(MaxLineLength, 50, 1000);
 	}
-
-	UPROPERTY(BlueprintReadWrite,EditAnywhere, Category = "VRLogComponent|Console")
-		int32 MaxLineLength;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRLogComponent|Console")
-		int32 MaxStoredMessages;
 
 	// Sets the console input text, can be used to clear the console or enter full or partial commands
 	UFUNCTION(BlueprintCallable, Category = "VRLogComponent|Console", meta = (bIgnoreSelf = "true"))
@@ -227,16 +241,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "VRLogComponent|Console", meta = (bIgnoreSelf = "true"))
 		void SendKeyEventToConsole(FKey Key, EInputEvent KeyEvent);
 
-	// Sends text to the console - Optionally returns at the end to "enter" the text, end flashes the cursor
-	UFUNCTION(BlueprintCallable, Category = "VRLogComponent|Console", meta = (bIgnoreSelf = "true"))
-		void AppendTextToConsole(FString Text, bool bReturnAtEnd = false);
+	// Declares
 
-	// Draw the console to a render target 2D
-	UFUNCTION(BlueprintCallable, Category = "VRLogComponent|Console", meta = (bIgnoreSelf = "true", DisplayName = "DrawConsoleToCanvasRenderTarget2D"))
-		bool DrawConsoleToRenderTarget2D(EBPVRConsoleDrawType DrawType, UTextureRenderTarget2D * Texture, float ScrollOffset, bool bForceDraw);
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRLogComponent|Console")
+		int32 MaxLineLength;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRLogComponent|Console")
+		int32 MaxStoredMessages;
 
-	void DrawConsole(bool bLowerHalfOnly, UCanvas* Canvas);
-	void DrawOutputLog(bool bUpperHalfOnly, UCanvas* Canvas, float ScrollOffset);
-
+	FVROutputLogHistory OutputLogHistory;
 };

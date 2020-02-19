@@ -1,16 +1,26 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
-#include "CoreMinimal.h"
-//#include "IMotionController.h"
-#include "VRBPDatatypes.h"
-#include "UObject/ObjectMacros.h"
-#include "Engine/EngineTypes.h"
-#include "UObject/ScriptInterface.h"
-#include "Kismet/BlueprintFunctionLibrary.h"
-#include "GameplayTagContainer.h"
 
+// Includes
+
+
+// Unreal
+#include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
+#include "Engine/EngineTypes.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
+#include "UObject/ObjectMacros.h"
+#include "UObject/ScriptInterface.h"
+
+// VREP
+#include "VRBPDatatypes.h"
+
+
+// UHeader Tool
 #include "VRInteractibleFunctionLibrary.generated.h"
+
+
 
 //General Advanced Sessions Log
 DECLARE_LOG_CATEGORY_EXTERN(VRInteractibleFunctionLibraryLog, Log, All);
@@ -33,26 +43,28 @@ struct VREXPANSIONPLUGIN_API FBPVRInteractibleBaseData
 {
 	GENERATED_BODY()
 public:
-
-	// Our initial relative transform to our parent "static space" - Set in BeginPlayInit
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
-	FTransform InitialRelativeTransform;
-
-	// Initial location in "static space" of the interactor on grip - Set in OnGripInit
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
-	FVector InitialInteractorLocation;
-
-	// Initial location of the interactible in the "static space" - Set in OnGripInit
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
-	FVector InitialGripLoc;
+	
+	// Declares
 
 	// Initial location on the interactible of the grip, used for drop calculations - Set in OnGripInit
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
-	FVector InitialDropLocation;
+		FVector InitialDropLocation;
 
+	// Initial location of the interactible in the "static space" - Set in OnGripInit
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
+		FVector InitialGripLoc;
+
+	// Initial location in "static space" of the interactor on grip - Set in OnGripInit
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
+		FVector InitialInteractorLocation;
+
+	// Our initial relative transform to our parent "static space" - Set in BeginPlayInit
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
+		FTransform InitialRelativeTransform;
+	   	  
 	// The initial transform in relative space of the grip to us - Set in OnGripInit
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "InteractibleData")
-	FTransform ReversedRelativeTransform;
+		FTransform ReversedRelativeTransform;
 };
 
 UCLASS()
@@ -60,6 +72,8 @@ class VREXPANSIONPLUGIN_API UVRInteractibleFunctionLibrary : public UBlueprintFu
 {
 	GENERATED_BODY()
 public:
+
+	// Functions
 
 	static float GetAtan2Angle(EVRInteractibleAxis AxisToCalc, FVector CurInteractorLocation, float OptionalInitialRotation = 0.0f)
 	{
@@ -82,23 +96,6 @@ public:
 		}
 
 		return 0.0f;
-	}
-
-	static float GetDeltaAngleFromTransforms(EVRInteractibleAxis RotAxis, FTransform & InitialRelativeTransform, FTransform &CurrentRelativeTransform)
-	{
-		return GetDeltaAngle(RotAxis, (InitialRelativeTransform.GetRotation().Inverse() * CurrentRelativeTransform.GetRotation()).GetNormalized());
-	}
-
-	static float GetDeltaAngle(EVRInteractibleAxis RotAxis, FQuat DeltaQuat)
-	{
-		FVector Axis;
-		float Angle;
-		DeltaQuat.ToAxisAndAngle(Axis, Angle);
-
-		if (RotAxis == EVRInteractibleAxis::Axis_Z)
-			return FRotator::NormalizeAxis(FMath::RadiansToDegrees(Angle)) * (FMath::Sign(GetAxisValue(RotAxis, Axis)));
-		else
-			return FRotator::NormalizeAxis(FMath::RadiansToDegrees(Angle)) * (-FMath::Sign(GetAxisValue(RotAxis, Axis)));
 	}
 
 	static float GetAxisValue(EVRInteractibleAxis RotAxis, FRotator CheckRotation)
@@ -127,6 +124,23 @@ public:
 			return CheckAxis.Z; break;
 		default:return 0.0f; break;
 		}
+	}
+	
+	static float GetDeltaAngleFromTransforms(EVRInteractibleAxis RotAxis, FTransform & InitialRelativeTransform, FTransform &CurrentRelativeTransform)
+	{
+		return GetDeltaAngle(RotAxis, (InitialRelativeTransform.GetRotation().Inverse() * CurrentRelativeTransform.GetRotation()).GetNormalized());
+	}
+
+	static float GetDeltaAngle(EVRInteractibleAxis RotAxis, FQuat DeltaQuat)
+	{
+		FVector Axis;
+		float Angle;
+		DeltaQuat.ToAxisAndAngle(Axis, Angle);
+
+		if (RotAxis == EVRInteractibleAxis::Axis_Z)
+			return FRotator::NormalizeAxis(FMath::RadiansToDegrees(Angle)) * (FMath::Sign(GetAxisValue(RotAxis, Axis)));
+		else
+			return FRotator::NormalizeAxis(FMath::RadiansToDegrees(Angle)) * (-FMath::Sign(GetAxisValue(RotAxis, Axis)));
 	}
 
 	static FVector SetAxisValueVec(EVRInteractibleAxis RotAxis, float SetValue)
@@ -182,6 +196,53 @@ public:
 		return vec;
 	}
 
+	// Inits the initial relative transform of an interactible on begin play
+	UFUNCTION(BlueprintCallable, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
+	static void Interactible_BeginPlayInit(USceneComponent * InteractibleComp, UPARAM(ref) FBPVRInteractibleBaseData & BaseDataToInit)
+	{
+		if (!InteractibleComp)
+			return;
+
+		BaseDataToInit.InitialRelativeTransform = InteractibleComp->GetRelativeTransform();
+	}
+
+	// Returns (in degrees) the angle around the axis of a location
+    // Expects the CurInteractorLocation to be in relative space already
+	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
+	static float Interactible_GetAngleAroundAxis(EVRInteractibleAxis AxisToCalc, FVector CurInteractorLocation)
+	{
+		float ReturnAxis = 0.0f;
+
+		switch (AxisToCalc)
+		{
+		case EVRInteractibleAxis::Axis_X:
+		{
+			ReturnAxis = FMath::RadiansToDegrees(FMath::Atan2(CurInteractorLocation.Y, CurInteractorLocation.Z));
+		}break;
+		case EVRInteractibleAxis::Axis_Y:
+		{
+			ReturnAxis = FMath::RadiansToDegrees(FMath::Atan2(CurInteractorLocation.Z, CurInteractorLocation.X));
+		}break;
+		case EVRInteractibleAxis::Axis_Z:
+		{
+			ReturnAxis = FMath::RadiansToDegrees(FMath::Atan2(CurInteractorLocation.Y, CurInteractorLocation.X));
+		}break;
+		default:
+		{}break;
+		}
+
+		return ReturnAxis;
+	}
+
+	// Returns (in degrees) the delta rotation from the initial angle at grip to the current interactor angle around the axis
+	// Expects CurInteractorLocation to be in relative space already
+	// You can add this to an initial rotation and clamp the result to rotate over time based on hand position
+	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
+	static float Interactible_GetAngleAroundAxisDelta(EVRInteractibleAxis AxisToCalc, FVector CurInteractorLocation, float InitialAngle)
+	{
+		return FRotator::NormalizeAxis(Interactible_GetAngleAroundAxis(AxisToCalc, CurInteractorLocation) - InitialAngle);
+	}
+	
 	// Get current parent transform
 	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
 	static FTransform Interactible_GetCurrentParentTransform(USceneComponent * SceneComponentToCheck)
@@ -213,20 +274,22 @@ public:
 
 		return BaseData.InitialRelativeTransform * ParentTransform;
 	}
-
-	// Inits the initial relative transform of an interactible on begin play
-	UFUNCTION(BlueprintCallable, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
-		static void Interactible_BeginPlayInit(USceneComponent * InteractibleComp, UPARAM(ref) FBPVRInteractibleBaseData & BaseDataToInit)
+	   
+	// Returns a value that is snapped to the given settings, taking into account the threshold and increment
+	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
+	static float Interactible_GetThresholdSnappedValue(float ValueToSnap, float SnapIncrement, float SnapThreshold)
 	{
-		if (!InteractibleComp)
-			return;
+		if (FMath::Fmod(ValueToSnap, SnapIncrement) <= FMath::Min(SnapIncrement, SnapThreshold))
+		{
+			return FMath::GridSnap(ValueToSnap, SnapIncrement);
+		}
 
-		BaseDataToInit.InitialRelativeTransform = InteractibleComp->GetRelativeTransform();
+		return ValueToSnap;
 	}
 
 	// Inits the calculated values of a VR Interactible Base Data Structure on a grip event
 	UFUNCTION(BlueprintCallable, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
-		static void Interactible_OnGripInit(USceneComponent * InteractibleComp, UPARAM(ref) FBPActorGripInformation& GripInformation, UPARAM(ref) FBPVRInteractibleBaseData & BaseDataToInit)
+	static void Interactible_OnGripInit(USceneComponent * InteractibleComp, UPARAM(ref) FBPActorGripInformation& GripInformation, UPARAM(ref) FBPVRInteractibleBaseData & BaseDataToInit)
 	{
 		if (!InteractibleComp)
 			return;
@@ -240,57 +303,6 @@ public:
 		
 		BaseDataToInit.InitialGripLoc = BaseDataToInit.InitialRelativeTransform.InverseTransformPosition(InteractibleComp->RelativeLocation);
 	}
-
-	// Returns (in degrees) the angle around the axis of a location
-	// Expects the CurInteractorLocation to be in relative space already
-	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
-	static float Interactible_GetAngleAroundAxis(EVRInteractibleAxis AxisToCalc, FVector CurInteractorLocation)
-	{
-		float ReturnAxis = 0.0f;
-
-		switch (AxisToCalc)
-		{
-		case EVRInteractibleAxis::Axis_X:
-		{
-			ReturnAxis = FMath::RadiansToDegrees(FMath::Atan2(CurInteractorLocation.Y, CurInteractorLocation.Z));
-		}break;
-		case EVRInteractibleAxis::Axis_Y:
-		{
-			ReturnAxis = FMath::RadiansToDegrees(FMath::Atan2(CurInteractorLocation.Z, CurInteractorLocation.X));
-		}break;
-		case EVRInteractibleAxis::Axis_Z:
-		{
-			ReturnAxis = FMath::RadiansToDegrees(FMath::Atan2(CurInteractorLocation.Y, CurInteractorLocation.X));
-		}break;
-		default:
-		{}break;
-		}
-
-		return ReturnAxis;
-	}
-
-	// Returns (in degrees) the delta rotation from the initial angle at grip to the current interactor angle around the axis
-	// Expects CurInteractorLocation to be in relative space already
-	// You can add this to an initial rotation and clamp the result to rotate over time based on hand position
-	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))	
-	static float Interactible_GetAngleAroundAxisDelta(EVRInteractibleAxis AxisToCalc, FVector CurInteractorLocation, float InitialAngle)
-	{
-		return FRotator::NormalizeAxis(Interactible_GetAngleAroundAxis(AxisToCalc, CurInteractorLocation) - InitialAngle);
-	}
-
-
-	// Returns a value that is snapped to the given settings, taking into account the threshold and increment
-	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
-		static float Interactible_GetThresholdSnappedValue(float ValueToSnap, float SnapIncrement, float SnapThreshold)
-	{
-		if (FMath::Fmod(ValueToSnap, SnapIncrement) <= FMath::Min(SnapIncrement, SnapThreshold))
-		{
-			return FMath::GridSnap(ValueToSnap, SnapIncrement);
-		}
-
-		return ValueToSnap;
-	}
-
 };	
 
 

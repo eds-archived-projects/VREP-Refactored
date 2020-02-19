@@ -93,7 +93,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "SecondaryGripInfo") 
 		bool bIsSlotGrip;
 
-	UPROPERTY() FTransform_NetQuantize SecondaryRelativeTransform;
+  UPROPERTY(BlueprintReadOnly, Category = "SecondaryGripInfo") 
+	   FTransform_NetQuantize SecondaryRelativeTransform;
+	
 	UPROPERTY() float                  LerpToRate                ;    //Lerp transitions. Max value is 16 seconds with two decimal precision, this is to reduce replication overhead.
 
 	EGripLerpState GripLerpState       ;   // These are not replicated, they don't need to be

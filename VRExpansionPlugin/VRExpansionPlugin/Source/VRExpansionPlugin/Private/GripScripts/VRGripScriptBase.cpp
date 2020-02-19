@@ -71,10 +71,10 @@ void UVRGripScriptBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	OnEndPlay(EndPlayReason);
 }
 
-int32 UVRGripScriptBase::GetFunctionCallspace(UFunction* Function, void* Parameters, FFrame* Stack)
+int32 UVRGripScriptBase::GetFunctionCallspace(UFunction * Function, FFrame * Stack)
 {
 	AActor* Owner = GetOwner();// Cast<AActor>(GetOuter());
-	return (Owner ? Owner->GetFunctionCallspace(Function, Parameters, Stack) : FunctionCallspace::Local);
+	return (Owner ? Owner->GetFunctionCallspace(Function, Stack) : FunctionCallspace::Local);
 }
 
 FTransform UVRGripScriptBase::GetGripTransform(const FBPActorGripInformation& Grip, const FTransform& ParentTransform)

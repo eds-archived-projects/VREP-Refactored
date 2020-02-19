@@ -65,9 +65,12 @@ void AGrippableActor::CeaseReplicationBlocking()
 {
 	ClientAuthReplicationData.bIsCurrentlyClientAuth = false;
 
-	if (UWorld* OurWorld = GetWorld())
+	if (ClientAuthReplicationData.ResetReplicationHandle.IsValid())
 	{
-		OurWorld->GetTimerManager().ClearTimer(ClientAuthReplicationData.ResetReplicationHandle);
+		if (UWorld * OurWorld = GetWorld())
+		{
+			OurWorld->GetTimerManager().ClearTimer(ClientAuthReplicationData.ResetReplicationHandle);
+		}
 	}
 }
 
@@ -102,13 +105,13 @@ bool AGrippableActor::PollReplicationEvent()
 		if (UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(RootComponent))
 		{
 			// Need to clamp to a max time since start, to handle cases with conflicting collisions.
-			if (PrimComp->IsSimulatingPhysics() && ShouldWeSkipAttachmentReplication())
+		  if (PrimComp->IsSimulatingPhysics() && ShouldWeSkipAttachmentReplication(false))
 			{
 				FRepMovementVR ClientAuthMovementRep;
 
 				if (ClientAuthMovementRep.GatherActorsMovement(this))
 				{
-					Server_GetClientAuthReplication(ClientAuthMovementRep);
+				    Server_GetClientAuthReplication(ClientAuthMovementRep);
 
 					if (PrimComp->RigidBodyIsAwake())
 					{
@@ -150,9 +153,8 @@ bool AGrippableActor::PollReplicationEvent()
 					OurWorld->GetTimerManager().ClearTimer(ClientAuthReplicationData.ResetReplicationHandle);
 				}
 
-				// Lets clamp the ping to a min / max value just in case.
-				float clampedPing = FMath::Clamp(PlayerState->ExactPing, 0.0f, 1000.0f);
-
+				// Lets clamp the ping to a min / max value just in case
+				float clampedPing = FMath::Clamp(PlayerState->ExactPing * 0.001f, 0.0f, 1000.0f);
 				OurWorld->GetTimerManager().SetTimer(ClientAuthReplicationData.ResetReplicationHandle, this, &AGrippableActor::CeaseReplicationBlocking, clampedPing, false);
 			}
 		}
@@ -215,7 +217,7 @@ void AGrippableActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		GEngine->GetEngineSubsystem<UBucketUpdateSubsystem>()->RemoveObjectFromBucketByFunctionName(this, FName(TEXT("PollReplicationEvent")));
 	}
 
-	CeaseReplicationBlocking();
+  RemoveFromClientReplicationBucket();
 
 	// Call all grip scripts begin play events so they can perform any needed logic.
 	for (UVRGripScriptBase* Script : GripLogicScripts)
@@ -289,7 +291,7 @@ void AGrippableActor::OnRep_ReplicateMovement()
 
 void AGrippableActor::OnRep_ReplicatedMovement()
 {
-	if (ClientAuthReplicationData.bIsCurrentlyClientAuth && ShouldWeSkipAttachmentReplication())
+  if (ClientAuthReplicationData.bIsCurrentlyClientAuth && ShouldWeSkipAttachmentReplication(false))
 	{
 		return;
 	}
@@ -338,7 +340,7 @@ void AGrippableActor::PreReplication(IRepChangedPropertyTracker& ChangedProperty
 
 void AGrippableActor::PostNetReceivePhysicState()
 {
-	if (VRGripInterfaceSettings.bIsHeld && bAllowIgnoringAttachOnOwner && ShouldWeSkipAttachmentReplication())
+	if (VRGripInterfaceSettings.bIsHeld && bAllowIgnoringAttachOnOwner && ShouldWeSkipAttachmentReplication(false))
 	{
 		return;
 	}
@@ -366,6 +368,23 @@ bool AGrippableActor::ReplicateSubobjects(UActorChannel* Channel, class FOutBunc
 bool AGrippableActor::AllowsMultipleGrips_Implementation()
 {
 	return VRGripInterfaceSettings.bAllowMultipleGrips;
+}
+
+bool AGrippableActor::AddToClientReplicationBucket()
+{
+	if (ShouldWeSkipAttachmentReplication(false))
+	{
+		// The subsystem automatically removes entries with the same function signature so its safe to just always add here
+		GEngine->GetEngineSubsystem<UBucketUpdateSubsystem>()->AddObjectToBucket(ClientAuthReplicationData.UpdateRate, this, FName(TEXT("PollReplicationEvent")));
+		ClientAuthReplicationData.bIsCurrentlyClientAuth = true;
+
+		if (UWorld * World = GetWorld())
+			ClientAuthReplicationData.TimeAtInitialThrow = World->GetTimeSeconds();
+
+		return true;
+	}
+
+	return false;
 }
 
 FBPAdvGripSettings AGrippableActor::AdvancedGripSettings_Implementation()
@@ -443,6 +462,18 @@ void AGrippableActor::IsHeld_Implementation(TArray<FBPGripPair>& HoldingControll
 	bIsHeld            = VRGripInterfaceSettings.bIsHeld           ;
 }
 
+bool AGrippableActor::RemoveFromClientReplicationBucket()
+{
+	if (ClientAuthReplicationData.bIsCurrentlyClientAuth)
+	{
+		GEngine->GetEngineSubsystem<UBucketUpdateSubsystem>()->RemoveObjectFromBucketByFunctionName(this, FName(TEXT("PollReplicationEvent")));
+		CeaseReplicationBlocking();
+		return true;
+	}
+
+	return false;
+}
+
 bool AGrippableActor::RequestsSocketing_Implementation(USceneComponent*& ParentToSocketTo, FName& OptionalSocketName, FTransform_NetQuantize& RelativeTransform)
 { 
 	return false; 
@@ -463,33 +494,20 @@ void AGrippableActor::SetHeld_Implementation(UGripMotionControllerComponent* Hol
 	if (bIsHeld)
 	{
 		VRGripInterfaceSettings.HoldingControllers.AddUnique(FBPGripPair(HoldingController, GripID));
+		RemoveFromClientReplicationBucket();
 
-		if (ClientAuthReplicationData.bIsCurrentlyClientAuth)
-		{
-			GEngine->GetEngineSubsystem<UBucketUpdateSubsystem>()->RemoveObjectFromBucketByFunctionName(this, FName(TEXT("PollReplicationEvent")));
-
-			CeaseReplicationBlocking();
-		}
+		VRGripInterfaceSettings.bWasHeld = true;
 	}
 	else
 	{
 		VRGripInterfaceSettings.HoldingControllers.Remove(FBPGripPair(HoldingController, GripID));
-
-		if (ClientAuthReplicationData.bUseClientAuthThrowing && ShouldWeSkipAttachmentReplication())
+		if (ClientAuthReplicationData.bUseClientAuthThrowing && ShouldWeSkipAttachmentReplication(false))
 		{
-			if (UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(GetRootComponent()))
+			if (UPrimitiveComponent * PrimComp = Cast<UPrimitiveComponent>(GetRootComponent()))
 			{
 				if (PrimComp->IsSimulatingPhysics())
 				{
-					// The subsystem automatically removes entries with the same function signature so its safe to just always add here
-					GEngine->GetEngineSubsystem<UBucketUpdateSubsystem>()->AddObjectToBucket(ClientAuthReplicationData.UpdateRate, this, FName(TEXT("PollReplicationEvent")));
-
-					ClientAuthReplicationData.bIsCurrentlyClientAuth = true;
-
-					if (UWorld * World = GetWorld())
-					{
-						ClientAuthReplicationData.TimeAtInitialThrow = World->GetTimeSeconds();
-					}
+					AddToClientReplicationBucket();
 				}
 			}
 		}

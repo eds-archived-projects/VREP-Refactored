@@ -2,10 +2,18 @@
 
 #pragma once
 
+// Includes
+
+// Unreal
 #include "CoreMinimal.h"
+
+// VREP
 #include "VRGripScriptBase.h"
 #include "GripScripts/GS_Default.h"
+
+// UHeader Tool
 #include "GS_MeleeTools.generated.h"
+
 
 class UGripMotionControllerComponent;
 
@@ -22,16 +30,22 @@ public:
 	// Hit bone / if skeletal mesh
 	// Attachment data and normal of allowed penetration removal
 
+	// Constructor & Destructor
+
 	UGS_MeleeTools(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	{}
+
+	// Functions
 
 	virtual void OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) override
 	{
 		//GetOwner and get if a prim comp, if so then bind to its overlap / hit event if we aren't custom tracing it
 	}
+
 	virtual void OnSecondaryGrip_Implementation(UGripMotionControllerComponent * Controller, USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) override
 	{}
+
 	virtual bool GetWorldTransform_Implementation(UGripMotionControllerComponent * GrippingController, float DeltaTime, FTransform & WorldTransform, const FTransform &ParentTransform, FBPActorGripInformation &Grip, AActor * actor, UPrimitiveComponent * root, bool bRootHasInterface, bool bActorHasInterface, bool bIsForTeleport) override
 	{
 		return true;

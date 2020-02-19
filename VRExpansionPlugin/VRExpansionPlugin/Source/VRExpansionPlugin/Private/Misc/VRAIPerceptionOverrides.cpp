@@ -1,16 +1,22 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Misc/VRAIPerceptionOverrides.h"
+
+// Unreal
+#include "CollisionQueryParams.h"
 #include "EngineDefines.h"
 #include "EngineGlobals.h"
-#include "CollisionQueryParams.h"
 #include "Engine/Engine.h"
 #include "AIModule/Classes/AISystem.h"
 #include "AIModule/Classes/Perception/AIPerceptionComponent.h"
-#include "VisualLogger/VisualLogger.h"
+#include "AIModule/Classes/Perception/AIPerceptionSystem.h"
 #include "AIModule/Classes/Perception/AISightTargetInterface.h"
 #include "AIModule/Classes/Perception/AISenseConfig_Sight.h"
-#include "AIModule/Classes/Perception/AIPerceptionSystem.h"
+#include "VisualLogger/VisualLogger.h"
+
+// VREP
+
 
 #if WITH_GAMEPLAY_DEBUGGER
 #include "GameplayDebugger/Public/GameplayDebuggerTypes.h"
@@ -38,59 +44,15 @@ DECLARE_CYCLE_STAT(TEXT("Perception Sense: Sight, Remove To Target"), STAT_AI_Se
 
 static const int32 DefaultMaxTracesPerTick = 6;
 static const int32 DefaultMinQueriesPerTimeSliceCheck = 40;
-
-//----------------------------------------------------------------------//
-// helpers
-//----------------------------------------------------------------------//
-FORCEINLINE_DEBUGGABLE bool CheckIsTargetInSightPie(const FPerceptionListener& Listener, const UAISense_Sight_VR::FDigestedSightProperties& DigestedProps, const FVector& TargetLocation, const float SightRadiusSq)
-{
-	if (FVector::DistSquared(Listener.CachedLocation, TargetLocation) <= SightRadiusSq)
-	{
-		const FVector DirectionToTarget = (TargetLocation - Listener.CachedLocation).GetUnsafeNormal();
-		return FVector::DotProduct(DirectionToTarget, Listener.CachedDirection) > DigestedProps.PeripheralVisionAngleCos;
-	}
-
-	return false;
-}
-
-//----------------------------------------------------------------------//
-// FAISightTargetVR
-//----------------------------------------------------------------------//
 const FAISightTargetVR::FTargetId FAISightTargetVR::InvalidTargetId = FAISystem::InvalidUnsignedID;
 
-FAISightTargetVR::FAISightTargetVR(AActor* InTarget, FGenericTeamId InTeamId)
-	: Target(InTarget), SightTargetInterface(NULL), TeamId(InTeamId)
-{
-	if (InTarget)
-	{
-		TargetId = InTarget->GetUniqueID();
-	}
-	else
-	{
-		TargetId = InvalidTargetId;
-	}
-}
-
-//----------------------------------------------------------------------//
-// FDigestedSightProperties
-//----------------------------------------------------------------------//
-UAISense_Sight_VR::FDigestedSightProperties::FDigestedSightProperties(const UAISenseConfig_Sight_VR& SenseConfig)
-{
-	SightRadiusSq = FMath::Square(SenseConfig.SightRadius);
-	LoseSightRadiusSq = FMath::Square(SenseConfig.LoseSightRadius);
-	PeripheralVisionAngleCos = FMath::Cos(FMath::Clamp(FMath::DegreesToRadians(SenseConfig.PeripheralVisionAngleDegrees), 0.f, PI));
-	AffiliationFlags = SenseConfig.DetectionByAffiliation.GetAsFlags();
-	// keep the special value of FAISystem::InvalidRange (-1.f) if it's set.
-	AutoSuccessRangeSqFromLastSeenLocation = (SenseConfig.AutoSuccessRangeFromLastSeenLocation == FAISystem::InvalidRange) ? FAISystem::InvalidRange : FMath::Square(SenseConfig.AutoSuccessRangeFromLastSeenLocation);
-}
-
-UAISense_Sight_VR::FDigestedSightProperties::FDigestedSightProperties()
-	: PeripheralVisionAngleCos(0.f), SightRadiusSq(-1.f), AutoSuccessRangeSqFromLastSeenLocation(FAISystem::InvalidRange), LoseSightRadiusSq(-1.f), AffiliationFlags(-1)
-{}
-
-//----------------------------------------------------------------------//
 // UAISense_Sight_VR
-//----------------------------------------------------------------------//
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 UAISense_Sight_VR::UAISense_Sight_VR(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	, MaxTracesPerTick(DefaultMaxTracesPerTick)
@@ -118,6 +80,21 @@ UAISense_Sight_VR::UAISense_Sight_VR(const FObjectInitializer& ObjectInitializer
 	DefaultSightCollisionChannel = GET_AI_CONFIG_VAR(DefaultSightCollisionChannel);
 }
 
+FAISightTargetVR::FAISightTargetVR(AActor* InTarget, FGenericTeamId InTeamId)
+	: Target(InTarget), SightTargetInterface(NULL), TeamId(InTeamId)
+{
+	if (InTarget)
+	{
+		TargetId = InTarget->GetUniqueID();
+	}
+	else
+	{
+		TargetId = InvalidTargetId;
+	}
+}
+
+// Functions
+
 FORCEINLINE_DEBUGGABLE float UAISense_Sight_VR::CalcQueryImportance(const FPerceptionListener& Listener, const FVector& TargetLocation, const float SightRadiusSq) const
 {
 	const float DistanceSq = FVector::DistSquared(Listener.CachedLocation, TargetLocation);
@@ -125,10 +102,378 @@ FORCEINLINE_DEBUGGABLE float UAISense_Sight_VR::CalcQueryImportance(const FPerce
 		: FMath::Clamp((SightLimitQueryImportance - MaxQueryImportance) / SightRadiusSq * DistanceSq + MaxQueryImportance, 0.f, MaxQueryImportance);
 }
 
+FORCEINLINE_DEBUGGABLE bool CheckIsTargetInSightPie(const FPerceptionListener& Listener, const UAISense_Sight_VR::FDigestedSightProperties& DigestedProps, const FVector& TargetLocation, const float SightRadiusSq)
+{
+	if (FVector::DistSquared(Listener.CachedLocation, TargetLocation) <= SightRadiusSq)
+	{
+		const FVector DirectionToTarget = (TargetLocation - Listener.CachedLocation).GetUnsafeNormal();
+		return FVector::DotProduct(DirectionToTarget, Listener.CachedDirection) > DigestedProps.PeripheralVisionAngleCos;
+	}
+
+	return false;
+}
+
+void UAISense_Sight_VR::CleanseInvalidSources()
+{
+	bool bInvalidSourcesFound = false;
+	int32 NumInvalidSourcesFound = 0;
+	for (FTargetsContainer::TIterator ItTarget(ObservedTargets); ItTarget; ++ItTarget)
+	{
+		if (ItTarget->Value.Target.IsValid() == false)
+		{
+			// remove affected queries
+			RemoveAllQueriesToTarget(ItTarget->Key, DontSort);
+			// remove target itself
+			ItTarget.RemoveCurrent();
+
+			bInvalidSourcesFound = true;
+			NumInvalidSourcesFound++;
+		}
+	}
+
+	UE_LOG(LogAIPerceptionVR, Verbose, TEXT("UAISense_Sight_VR::CleanseInvalidSources called and removed %d invalid sources"), NumInvalidSourcesFound);
+
+	if (bInvalidSourcesFound)
+	{
+		// remove holes
+		ObservedTargets.Compact();
+		SortQueries();
+	}
+	else
+	{
+		UE_VLOG(GetPerceptionSystem(), LogAIPerceptionVR, Error, TEXT("UAISense_Sight_VR::CleanseInvalidSources called and no invalid targets were found"));
+	}
+}
+
+UAISense_Sight_VR::FDigestedSightProperties::FDigestedSightProperties(const UAISenseConfig_Sight_VR& SenseConfig)
+{
+	SightRadiusSq = FMath::Square(SenseConfig.SightRadius);
+	LoseSightRadiusSq = FMath::Square(SenseConfig.LoseSightRadius);
+	PeripheralVisionAngleCos = FMath::Cos(FMath::Clamp(FMath::DegreesToRadians(SenseConfig.PeripheralVisionAngleDegrees), 0.f, PI));
+	AffiliationFlags = SenseConfig.DetectionByAffiliation.GetAsFlags();
+	// keep the special value of FAISystem::InvalidRange (-1.f) if it's set.
+	AutoSuccessRangeSqFromLastSeenLocation = (SenseConfig.AutoSuccessRangeFromLastSeenLocation == FAISystem::InvalidRange) ? FAISystem::InvalidRange : FMath::Square(SenseConfig.AutoSuccessRangeFromLastSeenLocation);
+}
+
+UAISense_Sight_VR::FDigestedSightProperties::FDigestedSightProperties()
+	: PeripheralVisionAngleCos(0.f), SightRadiusSq(-1.f), AutoSuccessRangeSqFromLastSeenLocation(FAISystem::InvalidRange), LoseSightRadiusSq(-1.f), AffiliationFlags(-1)
+{}
+
+void UAISense_Sight_VR::GenerateQueriesForListener(const FPerceptionListener& Listener, const FDigestedSightProperties& PropertyDigest)
+{
+	GenerateQueriesForListener(Listener, PropertyDigest, [](FAISightQueryVR & Query) {});
+}
+
+void UAISense_Sight_VR::GenerateQueriesForListener(const FPerceptionListener & Listener, const FDigestedSightProperties & PropertyDigest, TFunctionRef<void(FAISightQueryVR&)> OnAddedFunc)
+{
+	bool bNewQueriesAdded = false;
+	const IGenericTeamAgentInterface* ListenersTeamAgent = Listener.GetTeamAgent();
+	const AActor* Avatar = Listener.GetBodyActor();
+
+	// create sight queries with all legal targets
+	for (FTargetsContainer::TConstIterator ItTarget(ObservedTargets); ItTarget; ++ItTarget)
+	{
+		const AActor* TargetActor = ItTarget->Value.GetTargetActor();
+		if (TargetActor == NULL || TargetActor == Avatar)
+		{
+			continue;
+		}
+
+		if (FAISenseAffiliationFilter::ShouldSenseTeam(ListenersTeamAgent, *TargetActor, PropertyDigest.AffiliationFlags))
+		{
+			// create a sight query		
+			FAISightQueryVR& AddedQuery = SightQueryQueue.AddDefaulted_GetRef();
+			AddedQuery.ObserverId = Listener.GetListenerID();
+			AddedQuery.TargetId = ItTarget->Key;
+			AddedQuery.Importance = CalcQueryImportance(Listener, ItTarget->Value.GetLocationSimple(), PropertyDigest.SightRadiusSq);
+
+			OnAddedFunc(AddedQuery);
+			bNewQueriesAdded = true;
+		}
+	}
+
+	// sort Sight Queries
+	if (bNewQueriesAdded)
+	{
+		SortQueries();
+		RequestImmediateUpdate();
+	}
+}
+
+void UAISense_Sight_VR::OnListenerForgetsActor(const FPerceptionListener& Listener, AActor& ActorToForget)
+{
+	const uint32 ListenerId = Listener.GetListenerID();
+	const uint32 TargetId = ActorToForget.GetUniqueID();
+
+	for (FAISightQueryVR& SightQuery : SightQueryQueue)
+	{
+		if (SightQuery.ObserverId == ListenerId && SightQuery.TargetId == TargetId)
+		{
+			// assuming one query per observer-target pair
+			SightQuery.ForgetPreviousResult();
+			break;
+		}
+	}
+}
+
+void UAISense_Sight_VR::OnListenerForgetsAll(const FPerceptionListener& Listener)
+{
+	const uint32 ListenerId = Listener.GetListenerID();
+
+	for (FAISightQueryVR& SightQuery : SightQueryQueue)
+	{
+		if (SightQuery.ObserverId == ListenerId)
+		{
+			SightQuery.ForgetPreviousResult();
+		}
+	}
+}
+
+void UAISense_Sight_VR::OnListenerUpdateImpl(const FPerceptionListener& UpdatedListener)
+{
+	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_ListenerUpdate);
+
+	// first, naive implementation:
+	// 1. remove all queries by this listener
+	// 2. proceed as if it was a new listener
+
+	// see if this listener is a Target as well
+	const FAISightTargetVR::FTargetId AsTargetId = UpdatedListener.GetBodyActorUniqueID();
+	FAISightTargetVR* AsTarget = ObservedTargets.Find(AsTargetId);
+	if (AsTarget != NULL)
+	{
+		if (AsTarget->Target.IsValid())
+		{
+			// if still a valid target then backup list of observers for which the listener was visible to restore in the newly created queries
+			TSet<FPerceptionListenerID> LastVisibleObservers;
+			RemoveAllQueriesToTarget(AsTargetId, DontSort, [&LastVisibleObservers](const FAISightQueryVR & Query)
+				{
+					if (Query.bLastResult)
+					{
+						LastVisibleObservers.Add(Query.ObserverId);
+					}
+				});
+
+			RegisterTarget(*(AsTarget->Target.Get()), DontSort, [&LastVisibleObservers](FAISightQueryVR & Query)
+				{
+					Query.bLastResult = LastVisibleObservers.Contains(Query.ObserverId);
+				});
+		}
+		else
+		{
+			RemoveAllQueriesToTarget(AsTargetId, DontSort);
+		}
+	}
+
+	const FPerceptionListenerID ListenerID = UpdatedListener.GetListenerID();
+
+	if (UpdatedListener.HasSense(GetSenseID()))
+	{
+		// if still a valid sense then backup list of targets that were visible by the listener to restore in the newly created queries
+		TSet<FAISightTargetVR::FTargetId> LastVisibleTargets;
+		RemoveAllQueriesByListener(UpdatedListener, DontSort, [&LastVisibleTargets](const FAISightQueryVR & Query)
+			{
+				if (Query.bLastResult)
+				{
+					LastVisibleTargets.Add(Query.TargetId);
+				}
+			});
+
+		const UAISenseConfig_Sight_VR* SenseConfig = Cast<const UAISenseConfig_Sight_VR>(UpdatedListener.Listener->GetSenseConfig(GetSenseID()));
+		check(SenseConfig);
+		FDigestedSightProperties& PropertiesDigest = DigestedProperties.FindOrAdd(ListenerID);
+		PropertiesDigest = FDigestedSightProperties(*SenseConfig);
+
+		GenerateQueriesForListener(UpdatedListener, PropertiesDigest, [&LastVisibleTargets](FAISightQueryVR & Query)
+			{
+				Query.bLastResult = LastVisibleTargets.Contains(Query.TargetId);
+			});
+	}
+	else
+	{
+		// remove all queries
+		RemoveAllQueriesByListener(UpdatedListener, DontSort);
+		DigestedProperties.Remove(ListenerID);
+	}
+}
+
+void UAISense_Sight_VR::OnListenerRemovedImpl(const FPerceptionListener& UpdatedListener)
+{
+	RemoveAllQueriesByListener(UpdatedListener, DontSort);
+
+	DigestedProperties.FindAndRemoveChecked(UpdatedListener.GetListenerID());
+
+	// note: there use to be code to remove all queries _to_ listener here as well
+	// but that was wrong - the fact that a listener gets unregistered doesn't have to
+	// mean it's being removed from the game altogether.
+}
+
+void UAISense_Sight_VR::OnNewListenerImpl(const FPerceptionListener& NewListener)
+{
+	UAIPerceptionComponent* NewListenerPtr = NewListener.Listener.Get();
+	check(NewListenerPtr);
+	const UAISenseConfig_Sight_VR* SenseConfig = Cast<const UAISenseConfig_Sight_VR>(NewListenerPtr->GetSenseConfig(GetSenseID()));
+
+	check(SenseConfig);
+	const FDigestedSightProperties PropertyDigest(*SenseConfig);
+	DigestedProperties.Add(NewListener.GetListenerID(), PropertyDigest);
+
+	GenerateQueriesForListener(NewListener, PropertyDigest);
+}
+
 void UAISense_Sight_VR::PostInitProperties()
 {
 	Super::PostInitProperties();
 	HighImportanceDistanceSquare = FMath::Square(HighImportanceQueryDistanceThreshold);
+}
+
+void UAISense_Sight_VR::RegisterEvent(const FAISightEventVR& Event)
+{
+
+}
+
+void UAISense_Sight_VR::RegisterSource(AActor& SourceActor)
+{
+	RegisterTarget(SourceActor, Sort);
+}
+
+bool UAISense_Sight_VR::RegisterTarget(AActor& TargetActor, FQueriesOperationPostProcess PostProcess)
+{
+	return RegisterTarget(TargetActor, PostProcess, [](FAISightQueryVR & Query) {});
+}
+
+bool UAISense_Sight_VR::RegisterTarget(AActor & TargetActor, FQueriesOperationPostProcess PostProcess, TFunctionRef<void(FAISightQueryVR&)> OnAddedFunc)
+{
+	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_RegisterTarget);
+
+	FAISightTargetVR* SightTarget = ObservedTargets.Find(TargetActor.GetUniqueID());
+
+	if (SightTarget != nullptr && SightTarget->GetTargetActor() != &TargetActor)
+	{
+		// this means given unique ID has already been recycled. 
+		FAISightTargetVR NewSightTarget(&TargetActor);
+
+		SightTarget = &(ObservedTargets.Add(NewSightTarget.TargetId, NewSightTarget));
+		SightTarget->SightTargetInterface = Cast<IAISightTargetInterface>(&TargetActor);
+	}
+	else if (SightTarget == nullptr)
+	{
+		FAISightTargetVR NewSightTarget(&TargetActor);
+
+		SightTarget = &(ObservedTargets.Add(NewSightTarget.TargetId, NewSightTarget));
+		SightTarget->SightTargetInterface = Cast<IAISightTargetInterface>(&TargetActor);
+	}
+
+	// set/update data
+	SightTarget->TeamId = FGenericTeamId::GetTeamIdentifier(&TargetActor);
+
+	// generate all pairs and add them to current Sight Queries
+	bool bNewQueriesAdded = false;
+	AIPerception::FListenerMap& ListenersMap = *GetListeners();
+
+	// Changed this up to support my VR Characters
+	const AVRBaseCharacter * VRChar = Cast<const AVRBaseCharacter>(&TargetActor);
+	const FVector TargetLocation = VRChar != nullptr ? VRChar->GetVRLocation_Inline() : TargetActor.GetActorLocation();
+
+	for (AIPerception::FListenerMap::TConstIterator ItListener(ListenersMap); ItListener; ++ItListener)
+	{
+		const FPerceptionListener& Listener = ItListener->Value;
+		const IGenericTeamAgentInterface* ListenersTeamAgent = Listener.GetTeamAgent();
+
+		if (Listener.HasSense(GetSenseID()) && Listener.GetBodyActor() != &TargetActor)
+		{
+			const FDigestedSightProperties& PropDigest = DigestedProperties[Listener.GetListenerID()];
+			if (FAISenseAffiliationFilter::ShouldSenseTeam(ListenersTeamAgent, TargetActor, PropDigest.AffiliationFlags))
+			{
+				// create a sight query		
+				FAISightQueryVR& AddedQuery = SightQueryQueue.AddDefaulted_GetRef();
+				AddedQuery.ObserverId = ItListener->Key;
+				AddedQuery.TargetId = SightTarget->TargetId;
+				AddedQuery.Importance = CalcQueryImportance(ItListener->Value, TargetLocation, PropDigest.SightRadiusSq);
+
+				OnAddedFunc(AddedQuery);
+				bNewQueriesAdded = true;
+			}
+		}
+	}
+
+	// sort Sight Queries
+	if (PostProcess == Sort && bNewQueriesAdded)
+	{
+		SortQueries();
+		RequestImmediateUpdate();
+	}
+
+	return bNewQueriesAdded;
+}
+
+void UAISense_Sight_VR::RemoveAllQueriesByListener(const FPerceptionListener& Listener, FQueriesOperationPostProcess PostProcess)
+{
+	RemoveAllQueriesByListener(Listener, PostProcess, [](const FAISightQueryVR & Query) {});
+}
+
+void UAISense_Sight_VR::RemoveAllQueriesByListener(const FPerceptionListener& Listener, FQueriesOperationPostProcess PostProcess, TFunctionRef<void(const FAISightQueryVR&)> OnRemoveFunc)
+{
+	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_RemoveByListener);
+
+	if (SightQueryQueue.Num() == 0)
+	{
+		return;
+	}
+
+	const uint32 ListenerId = Listener.GetListenerID();
+	bool bQueriesRemoved = false;
+
+	for (int32 QueryIndex = SightQueryQueue.Num() - 1; QueryIndex >= 0; --QueryIndex)
+	{
+		const FAISightQueryVR& SightQuery = SightQueryQueue[QueryIndex];
+
+		if (SightQuery.ObserverId == ListenerId)
+		{
+			OnRemoveFunc(SightQuery);
+			SightQueryQueue.RemoveAt(QueryIndex, 1, /*bAllowShrinking=*/false);
+			bQueriesRemoved = true;
+		}
+	}
+
+	if (PostProcess == Sort && bQueriesRemoved)
+	{
+		SortQueries();
+	}
+}
+
+void UAISense_Sight_VR::RemoveAllQueriesToTarget(const FAISightTargetVR::FTargetId& TargetId, FQueriesOperationPostProcess PostProcess)
+{
+	RemoveAllQueriesToTarget(TargetId, PostProcess, [](const FAISightQueryVR & Query) {});
+}
+
+void UAISense_Sight_VR::RemoveAllQueriesToTarget(const FAISightTargetVR::FTargetId& TargetId, FQueriesOperationPostProcess PostProcess, TFunctionRef<void(const FAISightQueryVR&)> OnRemoveFunc)
+{
+	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_RemoveToTarget);
+
+	if (SightQueryQueue.Num() == 0)
+	{
+		return;
+	}
+
+	bool bQueriesRemoved = false;
+
+	for (int32 QueryIndex = SightQueryQueue.Num() - 1; QueryIndex >= 0; --QueryIndex)
+	{
+		const FAISightQueryVR& SightQuery = SightQueryQueue[QueryIndex];
+
+		if (SightQuery.TargetId == TargetId)
+		{
+			OnRemoveFunc(SightQuery);
+			SightQueryQueue.RemoveAt(QueryIndex, 1, /*bAllowShrinking=*/false);
+			bQueriesRemoved = true;
+		}
+	}
+
+	if (PostProcess == Sort && bQueriesRemoved)
+	{
+		SortQueries();
+	}
 }
 
 bool UAISense_Sight_VR::ShouldAutomaticallySeeTarget(const FDigestedSightProperties& PropDigest, FAISightQueryVR* SightQuery, FPerceptionListener& Listener, AActor* TargetActor, float& OutStimulusStrength) const
@@ -144,6 +489,42 @@ bool UAISense_Sight_VR::ShouldAutomaticallySeeTarget(const FDigestedSightPropert
 	}
 
 	return false;
+}
+
+void UAISense_Sight_VR::UnregisterSource(AActor& SourceActor)
+{
+	const FAISightTargetVR::FTargetId AsTargetId = SourceActor.GetUniqueID();
+	FAISightTargetVR AsTarget;
+
+	if (ObservedTargets.RemoveAndCopyValue(AsTargetId, AsTarget)
+		&& SightQueryQueue.Num() > 0)
+	{
+		AActor* TargetActor = AsTarget.Target.Get();
+
+		if (TargetActor)
+		{
+			// notify all interested observers that this source is no longer
+			// visible		
+			AIPerception::FListenerMap& ListenersMap = *GetListeners();
+			const FAISightQueryVR* SightQuery = &SightQueryQueue[SightQueryQueue.Num() - 1];
+			for (int32 QueryIndex = SightQueryQueue.Num() - 1; QueryIndex >= 0; --QueryIndex, --SightQuery)
+			{
+				if (SightQuery->TargetId == AsTargetId)
+				{
+					if (SightQuery->bLastResult == true)
+					{
+						FPerceptionListener& Listener = ListenersMap[SightQuery->ObserverId];
+						ensure(Listener.Listener.IsValid());
+
+						Listener.RegisterStimulus(TargetActor, FAIStimulus(*this, 0.f, SightQuery->LastSeenLocation, Listener.CachedLocation, FAIStimulus::SensingFailed));
+					}
+
+					SightQueryQueue.RemoveAt(QueryIndex, 1, /*bAllowShrinking=*/false);
+				}
+			}
+			// no point in sorting, we haven't change the order of other queries
+		}
+	}
 }
 
 float UAISense_Sight_VR::Update()
@@ -359,335 +740,14 @@ float UAISense_Sight_VR::Update()
 	return 0.f;
 }
 
-void UAISense_Sight_VR::RegisterEvent(const FAISightEventVR& Event)
-{
 
-}
+// UAISenseConfig_Sight_VR
 
-void UAISense_Sight_VR::RegisterSource(AActor& SourceActor)
-{
-	RegisterTarget(SourceActor, Sort);
-}
+// Public
 
-void UAISense_Sight_VR::UnregisterSource(AActor& SourceActor)
-{
-	const FAISightTargetVR::FTargetId AsTargetId = SourceActor.GetUniqueID();
-	FAISightTargetVR AsTarget;
+// Constructor & Destructor
 
-	if (ObservedTargets.RemoveAndCopyValue(AsTargetId, AsTarget)
-		&& SightQueryQueue.Num() > 0)
-	{
-		AActor* TargetActor = AsTarget.Target.Get();
-
-		if (TargetActor)
-		{
-			// notify all interested observers that this source is no longer
-			// visible		
-			AIPerception::FListenerMap& ListenersMap = *GetListeners();
-			const FAISightQueryVR* SightQuery = &SightQueryQueue[SightQueryQueue.Num() - 1];
-			for (int32 QueryIndex = SightQueryQueue.Num() - 1; QueryIndex >= 0; --QueryIndex, --SightQuery)
-			{
-				if (SightQuery->TargetId == AsTargetId)
-				{
-					if (SightQuery->bLastResult == true)
-					{
-						FPerceptionListener& Listener = ListenersMap[SightQuery->ObserverId];
-						ensure(Listener.Listener.IsValid());
-
-						Listener.RegisterStimulus(TargetActor, FAIStimulus(*this, 0.f, SightQuery->LastSeenLocation, Listener.CachedLocation, FAIStimulus::SensingFailed));
-					}
-
-					SightQueryQueue.RemoveAt(QueryIndex, 1, /*bAllowShrinking=*/false);
-				}
-			}
-			// no point in sorting, we haven't change the order of other queries
-		}
-	}
-}
-
-void UAISense_Sight_VR::CleanseInvalidSources()
-{
-	bool bInvalidSourcesFound = false;
-	int32 NumInvalidSourcesFound = 0;
-	for (FTargetsContainer::TIterator ItTarget(ObservedTargets); ItTarget; ++ItTarget)
-	{
-		if (ItTarget->Value.Target.IsValid() == false)
-		{
-			// remove affected queries
-			RemoveAllQueriesToTarget(ItTarget->Key, DontSort);
-			// remove target itself
-			ItTarget.RemoveCurrent();
-
-			bInvalidSourcesFound = true;
-			NumInvalidSourcesFound++;
-		}
-	}
-
-	UE_LOG(LogAIPerceptionVR, Verbose, TEXT("UAISense_Sight_VR::CleanseInvalidSources called and removed %d invalid sources"), NumInvalidSourcesFound);
-
-	if (bInvalidSourcesFound)
-	{
-		// remove holes
-		ObservedTargets.Compact();
-		SortQueries();
-	}
-	else
-	{
-		UE_VLOG(GetPerceptionSystem(), LogAIPerceptionVR, Error, TEXT("UAISense_Sight_VR::CleanseInvalidSources called and no invalid targets were found"));
-	}
-}
-
-bool UAISense_Sight_VR::RegisterTarget(AActor& TargetActor, FQueriesOperationPostProcess PostProcess)
-{
-	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_RegisterTarget);
-
-	FAISightTargetVR* SightTarget = ObservedTargets.Find(TargetActor.GetUniqueID());
-
-	if (SightTarget != nullptr && SightTarget->GetTargetActor() != &TargetActor)
-	{
-		// this means given unique ID has already been recycled. 
-		FAISightTargetVR NewSightTarget(&TargetActor);
-
-		SightTarget = &(ObservedTargets.Add(NewSightTarget.TargetId, NewSightTarget));
-		SightTarget->SightTargetInterface = Cast<IAISightTargetInterface>(&TargetActor);
-	}
-	else if (SightTarget == nullptr)
-	{
-		FAISightTargetVR NewSightTarget(&TargetActor);
-
-		SightTarget = &(ObservedTargets.Add(NewSightTarget.TargetId, NewSightTarget));
-		SightTarget->SightTargetInterface = Cast<IAISightTargetInterface>(&TargetActor);
-	}
-
-	// set/update data
-	SightTarget->TeamId = FGenericTeamId::GetTeamIdentifier(&TargetActor);
-
-	// generate all pairs and add them to current Sight Queries
-	bool bNewQueriesAdded = false;
-	AIPerception::FListenerMap& ListenersMap = *GetListeners();
-
-	// Changed this up to support my VR Characters
-	const AVRBaseCharacter * VRChar = Cast<const AVRBaseCharacter>(&TargetActor);
-	const FVector TargetLocation = VRChar != nullptr ? VRChar->GetVRLocation_Inline() : TargetActor.GetActorLocation();
-
-	for (AIPerception::FListenerMap::TConstIterator ItListener(ListenersMap); ItListener; ++ItListener)
-	{
-		const FPerceptionListener& Listener = ItListener->Value;
-		const IGenericTeamAgentInterface* ListenersTeamAgent = Listener.GetTeamAgent();
-
-		if (Listener.HasSense(GetSenseID()) && Listener.GetBodyActor() != &TargetActor)
-		{
-			const FDigestedSightProperties& PropDigest = DigestedProperties[Listener.GetListenerID()];
-			if (FAISenseAffiliationFilter::ShouldSenseTeam(ListenersTeamAgent, TargetActor, PropDigest.AffiliationFlags))
-			{
-				// create a sight query		
-				FAISightQueryVR SightQuery(ItListener->Key, SightTarget->TargetId);
-				SightQuery.Importance = CalcQueryImportance(ItListener->Value, TargetLocation, PropDigest.SightRadiusSq);
-
-				SightQueryQueue.Add(SightQuery);
-				bNewQueriesAdded = true;
-			}
-		}
-	}
-
-	// sort Sight Queries
-	if (PostProcess == Sort && bNewQueriesAdded)
-	{
-		SortQueries();
-		RequestImmediateUpdate();
-	}
-
-	return bNewQueriesAdded;
-}
-
-void UAISense_Sight_VR::OnNewListenerImpl(const FPerceptionListener& NewListener)
-{
-	UAIPerceptionComponent* NewListenerPtr = NewListener.Listener.Get();
-	check(NewListenerPtr);
-	const UAISenseConfig_Sight_VR* SenseConfig = Cast<const UAISenseConfig_Sight_VR>(NewListenerPtr->GetSenseConfig(GetSenseID()));
-
-	check(SenseConfig);
-	const FDigestedSightProperties PropertyDigest(*SenseConfig);
-	DigestedProperties.Add(NewListener.GetListenerID(), PropertyDigest);
-
-	GenerateQueriesForListener(NewListener, PropertyDigest);
-}
-
-void UAISense_Sight_VR::GenerateQueriesForListener(const FPerceptionListener& Listener, const FDigestedSightProperties& PropertyDigest)
-{
-	bool bNewQueriesAdded = false;
-	const IGenericTeamAgentInterface* ListenersTeamAgent = Listener.GetTeamAgent();
-	const AActor* Avatar = Listener.GetBodyActor();
-
-	// create sight queries with all legal targets
-	for (FTargetsContainer::TConstIterator ItTarget(ObservedTargets); ItTarget; ++ItTarget)
-	{
-		const AActor* TargetActor = ItTarget->Value.GetTargetActor();
-		if (TargetActor == NULL || TargetActor == Avatar)
-		{
-			continue;
-		}
-
-		if (FAISenseAffiliationFilter::ShouldSenseTeam(ListenersTeamAgent, *TargetActor, PropertyDigest.AffiliationFlags))
-		{
-			// create a sight query		
-			FAISightQueryVR SightQuery(Listener.GetListenerID(), ItTarget->Key);
-			SightQuery.Importance = CalcQueryImportance(Listener, ItTarget->Value.GetLocationSimple(), PropertyDigest.SightRadiusSq);
-
-			SightQueryQueue.Add(SightQuery);
-			bNewQueriesAdded = true;
-		}
-	}
-
-	// sort Sight Queries
-	if (bNewQueriesAdded)
-	{
-		SortQueries();
-		RequestImmediateUpdate();
-	}
-}
-
-void UAISense_Sight_VR::OnListenerUpdateImpl(const FPerceptionListener& UpdatedListener)
-{
-	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_ListenerUpdate);
-
-	// first, naive implementation:
-	// 1. remove all queries by this listener
-	// 2. proceed as if it was a new listener
-
-	// remove all queries
-	RemoveAllQueriesByListener(UpdatedListener, DontSort);
-
-	// see if this listener is a Target as well
-	const FAISightTargetVR::FTargetId AsTargetId = UpdatedListener.GetBodyActorUniqueID();
-	FAISightTargetVR* AsTarget = ObservedTargets.Find(AsTargetId);
-	if (AsTarget != NULL)
-	{
-		RemoveAllQueriesToTarget(AsTargetId, DontSort);
-		if (AsTarget->Target.IsValid())
-		{
-			RegisterTarget(*(AsTarget->Target.Get()), DontSort);
-		}
-	}
-
-	const FPerceptionListenerID ListenerID = UpdatedListener.GetListenerID();
-
-	if (UpdatedListener.HasSense(GetSenseID()))
-	{
-		const UAISenseConfig_Sight_VR* SenseConfig = Cast<const UAISenseConfig_Sight_VR>(UpdatedListener.Listener->GetSenseConfig(GetSenseID()));
-		check(SenseConfig);
-		FDigestedSightProperties& PropertiesDigest = DigestedProperties.FindOrAdd(ListenerID);
-		PropertiesDigest = FDigestedSightProperties(*SenseConfig);
-
-		GenerateQueriesForListener(UpdatedListener, PropertiesDigest);
-	}
-	else
-	{
-		DigestedProperties.Remove(ListenerID);
-	}
-}
-
-void UAISense_Sight_VR::OnListenerRemovedImpl(const FPerceptionListener& UpdatedListener)
-{
-	RemoveAllQueriesByListener(UpdatedListener, DontSort);
-
-	DigestedProperties.FindAndRemoveChecked(UpdatedListener.GetListenerID());
-
-	// note: there use to be code to remove all queries _to_ listener here as well
-	// but that was wrong - the fact that a listener gets unregistered doesn't have to
-	// mean it's being removed from the game altogether.
-}
-
-void UAISense_Sight_VR::RemoveAllQueriesByListener(const FPerceptionListener& Listener, FQueriesOperationPostProcess PostProcess)
-{
-	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_RemoveByListener);
-
-	if (SightQueryQueue.Num() == 0)
-	{
-		return;
-	}
-
-	const uint32 ListenerId = Listener.GetListenerID();
-	bool bQueriesRemoved = false;
-
-	for (int32 QueryIndex = SightQueryQueue.Num() - 1; QueryIndex >= 0; --QueryIndex)
-	{
-		const FAISightQueryVR& SightQuery = SightQueryQueue[QueryIndex];
-
-		if (SightQuery.ObserverId == ListenerId)
-		{
-			SightQueryQueue.RemoveAt(QueryIndex, 1, /*bAllowShrinking=*/false);
-			bQueriesRemoved = true;
-		}
-	}
-
-	if (PostProcess == Sort && bQueriesRemoved)
-	{
-		SortQueries();
-	}
-}
-
-void UAISense_Sight_VR::RemoveAllQueriesToTarget(const FAISightTargetVR::FTargetId& TargetId, FQueriesOperationPostProcess PostProcess)
-{
-	SCOPE_CYCLE_COUNTER(STAT_AI_Sense_Sight_RemoveToTarget);
-
-	if (SightQueryQueue.Num() == 0)
-	{
-		return;
-	}
-
-	bool bQueriesRemoved = false;
-
-	for (int32 QueryIndex = SightQueryQueue.Num() - 1; QueryIndex >= 0; --QueryIndex)
-	{
-		const FAISightQueryVR& SightQuery = SightQueryQueue[QueryIndex];
-
-		if (SightQuery.TargetId == TargetId)
-		{
-			SightQueryQueue.RemoveAt(QueryIndex, 1, /*bAllowShrinking=*/false);
-			bQueriesRemoved = true;
-		}
-	}
-
-	if (PostProcess == Sort && bQueriesRemoved)
-	{
-		SortQueries();
-	}
-}
-
-void UAISense_Sight_VR::OnListenerForgetsActor(const FPerceptionListener& Listener, AActor& ActorToForget)
-{
-	const uint32 ListenerId = Listener.GetListenerID();
-	const uint32 TargetId = ActorToForget.GetUniqueID();
-
-	for (FAISightQueryVR& SightQuery : SightQueryQueue)
-	{
-		if (SightQuery.ObserverId == ListenerId && SightQuery.TargetId == TargetId)
-		{
-			// assuming one query per observer-target pair
-			SightQuery.ForgetPreviousResult();
-			break;
-		}
-	}
-}
-
-void UAISense_Sight_VR::OnListenerForgetsAll(const FPerceptionListener& Listener)
-{
-	const uint32 ListenerId = Listener.GetListenerID();
-
-	for (FAISightQueryVR& SightQuery : SightQueryQueue)
-	{
-		if (SightQuery.ObserverId == ListenerId)
-		{
-			SightQuery.ForgetPreviousResult();
-		}
-	}
-}
-
-
-//----------------------------------------------------------------------//
-// 
-//----------------------------------------------------------------------//
+//=============================================================================
 UAISenseConfig_Sight_VR::UAISenseConfig_Sight_VR(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
 	DebugColor = FColor::Green;
@@ -697,11 +757,6 @@ UAISenseConfig_Sight_VR::UAISenseConfig_Sight_VR(const FObjectInitializer& Objec
 	PeripheralVisionAngleDegrees = 90;
 	DetectionByAffiliation.bDetectEnemies = true;
 	Implementation = UAISense_Sight_VR::StaticClass();
-}
-
-TSubclassOf<UAISense> UAISenseConfig_Sight_VR::GetSenseImplementation() const
-{
-	return *Implementation;
 }
 
 #if WITH_GAMEPLAY_DEBUGGER
@@ -753,3 +808,29 @@ void UAISenseConfig_Sight_VR::DescribeSelfToGameplayDebugger(const UAIPerception
 	}
 }
 #endif // WITH_GAMEPLAY_DEBUGGER
+
+TSubclassOf<UAISense> UAISenseConfig_Sight_VR::GetSenseImplementation() const
+{
+	return *Implementation;
+}
+
+#if WITH_EDITOR
+void UAISenseConfig_Sight_VR::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	static const FName NAME_AutoSuccessRangeFromLastSeenLocation = GET_MEMBER_NAME_CHECKED(UAISenseConfig_Sight_VR, AutoSuccessRangeFromLastSeenLocation);
+
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	if (PropertyChangedEvent.Property)
+	{
+		const FName PropName = PropertyChangedEvent.Property->GetFName();
+		if (PropName == NAME_AutoSuccessRangeFromLastSeenLocation)
+		{
+			if (AutoSuccessRangeFromLastSeenLocation < 0)
+			{
+				AutoSuccessRangeFromLastSeenLocation = FAISystem::InvalidRange;
+			}
+		}
+	}
+}
+#endif // WITH_EDITOR

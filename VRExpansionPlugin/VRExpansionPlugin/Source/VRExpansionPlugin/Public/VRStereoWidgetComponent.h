@@ -61,6 +61,8 @@ public:
 
 	virtual FPrimitiveSceneProxy* CreateSceneProxy() override;
 
+	virtual void DrawWidgetToRenderTarget(float DeltaTime) override;
+
 	virtual TStructOnScope<FActorComponentInstanceData> GetComponentInstanceData() const override;
 
 	void OnUnregister() override;
@@ -80,6 +82,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StereoLayer")
 		bool bUseEpicsWorldLockedStereo;
 
+	// If true will not render or update until false
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StereoLayer")
+		bool bIsSleeping;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StereoLayer") uint32 bNoAlphaChannel           : 1;   /** True if the texture should not use its own alpha channel (1.0 will be substituted). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StereoLayer") uint32 bQuadPreserveTextureRatio : 1;   /** True if the quad should internally set it's Y value based on the set texture's dimensions. */
 
@@ -92,11 +98,11 @@ public:
 		FBox2D UVRect;
 
 	bool bShouldCreateProxy;
-	bool bLastWidgetDrew   ;
 
 private:
 
 	bool       bIsDirty           ;   /** Dirty state determines whether the stereo layer needs updating. **/
+	bool       bDirtyRenderTarget;
 	bool       bTextureNeedsUpdate;   /** Texture needs to be marked for update. **/
 	bool       bLastVisible       ;   /** Last frames visiblity state. **/
 	uint32     LayerId            ;   /** IStereoLayer id, 0 is unassigned. **/

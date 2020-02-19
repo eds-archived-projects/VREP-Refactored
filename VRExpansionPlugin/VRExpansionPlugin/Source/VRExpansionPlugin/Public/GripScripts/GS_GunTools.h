@@ -197,27 +197,36 @@ public:
 
 	virtual bool GetWorldTransform_Implementation(UGripMotionControllerComponent* GrippingController, float DeltaTime, FTransform& WorldTransform, const FTransform& ParentTransform, FBPActorGripInformation& Grip, AActor* actor, UPrimitiveComponent* root, bool bRootHasInterface, bool bActorHasInterface, bool bIsForTeleport) override;
 	
-	inline void GunTools_ApplySmoothingAndLerp(FBPActorGripInformation& Grip, FVector& frontLoc, FVector& frontLocOrig, float DeltaTime, bool bSkipHighQualitySimulations)
+	// Applies the two hand modifier, broke this out into a function so that we can handle late updates
+	static void ApplyTwoHandModifier(FTransform & OriginalTransform)
 	{
+
+
+	}
+
+	// Returns the smoothed value now
+	inline FVector GunTools_ApplySmoothingAndLerp(FBPActorGripInformation & Grip, FVector &frontLoc, FVector & frontLocOrig, float DeltaTime, bool bSkipHighQualitySimulations)
+	{
+		FVector SmoothedValue = frontLoc;
+
 		if (Grip.SecondaryGripInfo.GripLerpState == EGripLerpState::StartLerp) // Lerp into the new grip to smooth the transition
 		{
 			if (!bSkipHighQualitySimulations && AdvSecondarySettings.SecondaryGripScaler < 1.0f)
 			{
-				FVector SmoothedValue = AdvSecondarySettings.SecondarySmoothing.RunFilterSmoothing(frontLoc, DeltaTime);
-
+				SmoothedValue = AdvSecondarySettings.SecondarySmoothing.RunFilterSmoothing(frontLoc, DeltaTime);
 				frontLoc = FMath::Lerp(frontLoc, SmoothedValue, AdvSecondarySettings.SecondaryGripScaler);
-			}
 
-			Default_ApplySmoothingAndLerp(Grip, frontLoc, frontLocOrig, DeltaTime);
+			}
+			//Default_ApplySmoothingAndLerp(Grip, frontLoc, frontLocOrig, DeltaTime);
 		}
 		else if (!bSkipHighQualitySimulations && AdvSecondarySettings.bUseAdvancedSecondarySettings && AdvSecondarySettings.bUseConstantGripScaler) // If there is a frame by frame lerp
 		{
-			FVector SmoothedValue = AdvSecondarySettings.SecondarySmoothing.RunFilterSmoothing(frontLoc, DeltaTime);
-
+			SmoothedValue = AdvSecondarySettings.SecondarySmoothing.RunFilterSmoothing(frontLoc, DeltaTime);
 			frontLoc = FMath::Lerp(frontLoc, SmoothedValue, AdvSecondarySettings.SecondaryGripScaler);
 		}
-	}
 
+		return SmoothedValue;
+	}
 	// Declares
 
 	// (default false) If true will run through the entire simulation that the owning client uses for the gun. If false, does a lighter and more performant approximation.
@@ -245,6 +254,7 @@ public:
 
 	FTransform MountWorldTransform;
 	bool bIsMounted;
+	FTransform RelativeTransOnSecondaryRelease;
 	TWeakObjectPtr<USceneComponent> CameraComponent;
 
 	// Overrides the default behavior of using the HMD location for the stock and uses this component instead

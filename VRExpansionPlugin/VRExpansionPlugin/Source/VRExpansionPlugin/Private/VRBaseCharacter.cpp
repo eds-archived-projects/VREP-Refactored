@@ -1,9 +1,13 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "VRBaseCharacter.h"
+
+// Unreal
 #include "NavigationSystem.h"
+
+// VREP
 #include "VRPathFollowingComponent.h"
-//#include "Runtime/Engine/Private/EnginePrivate.h"
 
 DEFINE_LOG_CATEGORY(LogBaseVRCharacter);
 
@@ -13,6 +17,13 @@ FName AVRBaseCharacter::ReplicatedCameraComponentName(TEXT("VR Replicated Camera
 FName AVRBaseCharacter::ParentRelativeAttachmentComponentName(TEXT("Parent Relative Attachment"));
 FName AVRBaseCharacter::SmoothingSceneParentComponentName(TEXT("NetSmoother"));
 
+// AVRBaseCharacter
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 AVRBaseCharacter::AVRBaseCharacter(const FObjectInitializer& ObjectInitializer)
  : Super(ObjectInitializer.DoNotCreateDefaultSubobject(ACharacter::MeshComponentName).SetDefaultSubobjectClass<UVRBaseCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 
@@ -100,10 +111,139 @@ AVRBaseCharacter::AVRBaseCharacter(const FObjectInitializer& ObjectInitializer)
 	bUseExperimentalUnseatModeFix = true;
 }
 
-void AVRBaseCharacter::OnRep_PlayerState()
+// Functions
+
+FVector AVRBaseCharacter::AddActorWorldRotationVR(FRotator DeltaRot, bool bUseYawOnly)
 {
-	OnPlayerStateReplicated_Bind.Broadcast(GetPlayerState());
-	Super::OnRep_PlayerState();
+	AController* OwningController = GetController();
+
+	FVector NewLocation;
+	FRotator NewRotation;
+	FVector OrigLocation = GetActorLocation();
+	FVector PivotPoint = GetActorTransform().InverseTransformPosition(GetVRLocation_Inline());
+	PivotPoint.Z = 0.0f;
+
+	NewRotation = bUseControllerRotationYaw && OwningController ? OwningController->GetControlRotation() : GetActorRotation();
+
+	if (bUseYawOnly)
+	{
+		NewRotation.Pitch = 0.0f;
+		NewRotation.Roll = 0.0f;
+	}
+
+	NewLocation = OrigLocation + NewRotation.RotateVector(PivotPoint);
+	NewRotation = (NewRotation.Quaternion() * DeltaRot.Quaternion()).Rotator();
+	NewLocation -= NewRotation.RotateVector(PivotPoint);
+
+	if (bUseControllerRotationYaw && OwningController /*&& IsLocallyControlled()*/)
+		OwningController->SetControlRotation(NewRotation);
+
+	// Also setting actor rot because the control rot transfers to it anyway eventually
+	SetActorLocationAndRotation(NewLocation, NewRotation);
+	return NewLocation - OrigLocation;
+}
+
+void AVRBaseCharacter::ExtendedSimpleMoveToLocation(const FVector& GoalLocation, float AcceptanceRadius, bool bStopOnOverlap, bool bUsePathfinding, bool bProjectDestinationToNavigation, bool bCanStrafe, TSubclassOf<UNavigationQueryFilter> FilterClass, bool bAllowPartialPaths)
+{
+	UNavigationSystemV1* NavSys = Controller ? FNavigationSystem::GetCurrent<UNavigationSystemV1>(Controller->GetWorld()) : nullptr;
+	if (NavSys == nullptr || Controller == nullptr)
+	{
+		UE_LOG(LogBaseVRCharacter, Warning, TEXT("UVRSimpleCharacter::ExtendedSimpleMoveToLocation called for NavSys:%s Controller:%s (if any of these is None then there's your problem"),
+			*GetNameSafe(NavSys), *GetNameSafe(Controller));
+		return;
+	}
+
+	UPathFollowingComponent* PFollowComp = nullptr;
+	//Controller->InitNavigationControl(PFollowComp);
+	if (Controller)
+	{
+		// New for 4.20, spawning the missing path following component here if there isn't already one
+		PFollowComp = Controller->FindComponentByClass<UPathFollowingComponent>();
+		if (PFollowComp == nullptr)
+		{
+			PFollowComp = NewObject<UVRPathFollowingComponent>(Controller);
+			PFollowComp->RegisterComponentWithWorld(Controller->GetWorld());
+			PFollowComp->Initialize();
+		}
+	}
+
+	if (PFollowComp == nullptr)
+	{
+		UE_LOG(LogBaseVRCharacter, Warning, TEXT("ExtendedSimpleMoveToLocation - No PathFollowingComponent Found"));
+		return;
+	}
+
+	if (!PFollowComp->IsPathFollowingAllowed())
+	{
+		UE_LOG(LogBaseVRCharacter, Warning, TEXT("ExtendedSimpleMoveToLocation - Path Following Movement Is Not Set To Allowed"));
+		return;
+	}
+
+	EPathFollowingReachMode ReachMode;
+	if (bStopOnOverlap)
+		ReachMode = EPathFollowingReachMode::OverlapAgent;
+	else
+		ReachMode = EPathFollowingReachMode::ExactLocation;
+
+	bool bAlreadyAtGoal = false;
+
+	if (UVRPathFollowingComponent * pathcomp = Cast<UVRPathFollowingComponent>(PFollowComp))
+		bAlreadyAtGoal = pathcomp->HasReached(GoalLocation, /*EPathFollowingReachMode::OverlapAgent*/ReachMode);
+	else
+		bAlreadyAtGoal = PFollowComp->HasReached(GoalLocation, /*EPathFollowingReachMode::OverlapAgent*/ReachMode);
+
+	// script source, keep only one move request at time
+	if (PFollowComp->GetStatus() != EPathFollowingStatus::Idle)
+	{
+		if (GetNetMode() == ENetMode::NM_Client)
+		{
+			// Stop the movement here, not keeping the velocity because it bugs out for clients, might be able to fix.
+			PFollowComp->AbortMove(*NavSys, FPathFollowingResultFlags::ForcedScript | FPathFollowingResultFlags::NewRequest
+				, FAIRequestID::AnyRequest, /*bAlreadyAtGoal ? */EPathFollowingVelocityMode::Reset /*: EPathFollowingVelocityMode::Keep*/);
+		}
+		else
+		{
+			PFollowComp->AbortMove(*NavSys, FPathFollowingResultFlags::ForcedScript | FPathFollowingResultFlags::NewRequest
+				, FAIRequestID::AnyRequest, bAlreadyAtGoal ? EPathFollowingVelocityMode::Reset : EPathFollowingVelocityMode::Keep);
+		}
+	}
+
+	if (bAlreadyAtGoal)
+	{
+		PFollowComp->RequestMoveWithImmediateFinish(EPathFollowingResult::Success);
+	}
+	else
+	{
+		const ANavigationData* NavData = NavSys->GetNavDataForProps(Controller->GetNavAgentPropertiesRef());
+		if (NavData)
+		{
+			FPathFindingQuery Query(Controller, *NavData, Controller->GetNavAgentLocation(), GoalLocation);
+			FPathFindingResult Result = NavSys->FindPathSync(Query);
+			if (Result.IsSuccessful())
+			{
+				FAIMoveRequest MoveReq(GoalLocation);
+				MoveReq.SetUsePathfinding(bUsePathfinding);
+				MoveReq.SetAllowPartialPath(bAllowPartialPaths);
+				MoveReq.SetProjectGoalLocation(bProjectDestinationToNavigation);
+				MoveReq.SetNavigationFilter(*FilterClass ? FilterClass : DefaultNavigationFilterClass);
+				MoveReq.SetAcceptanceRadius(AcceptanceRadius);
+				MoveReq.SetReachTestIncludesAgentRadius(bStopOnOverlap);
+				MoveReq.SetCanStrafe(bCanStrafe);
+				MoveReq.SetReachTestIncludesGoalRadius(true);
+
+				PFollowComp->RequestMove(/*FAIMoveRequest(GoalLocation)*/MoveReq, Result.Path);
+			}
+			else if (PFollowComp->GetStatus() != EPathFollowingStatus::Idle)
+			{
+				PFollowComp->RequestMoveWithImmediateFinish(EPathFollowingResult::Invalid);
+			}
+		}
+	}
+}
+
+USkeletalMeshComponent* AVRBaseCharacter::GetIKMesh_Implementation() const
+{
+	return nullptr;
 }
 
 void AVRBaseCharacter::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
@@ -114,184 +254,9 @@ void AVRBaseCharacter::GetLifetimeReplicatedProps(TArray< class FLifetimePropert
 	DOREPLIFETIME_CONDITION(AVRBaseCharacter, ReplicatedCapsuleHeight, COND_SimulatedOnly);
 }
 
-void AVRBaseCharacter::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
-{
-	Super::PreReplication(ChangedPropertyTracker);
-
-	DOREPLIFETIME_ACTIVE_OVERRIDE(AVRBaseCharacter, ReplicatedCapsuleHeight, VRReplicateCapsuleHeight);
-}
-
-USkeletalMeshComponent* AVRBaseCharacter::GetIKMesh_Implementation() const
-{
-	return nullptr;
-}
-
-bool AVRBaseCharacter::Server_SetSeatedMode_Validate(USceneComponent * SeatParent, bool bSetSeatedMode, FTransform_NetQuantize TargetTransform, FTransform_NetQuantize InitialRelCameraTransform, float AllowedRadius, float AllowedRadiusThreshold, bool bZeroToHead, EVRConjoinedMovementModes PostSeatedMovementMode)
-{
-	return true;
-}
-
-void AVRBaseCharacter::Server_SetSeatedMode_Implementation(USceneComponent * SeatParent, bool bSetSeatedMode, FTransform_NetQuantize TargetTransform, FTransform_NetQuantize InitialRelCameraTransform, float AllowedRadius, float AllowedRadiusThreshold, bool bZeroToHead, EVRConjoinedMovementModes PostSeatedMovementMode)
-{
-	SetSeatedMode(SeatParent, bSetSeatedMode, TargetTransform, InitialRelCameraTransform, AllowedRadius, AllowedRadiusThreshold, bZeroToHead, PostSeatedMovementMode);
-}
-
-void AVRBaseCharacter::Server_ReZeroSeating_Implementation(FTransform_NetQuantize NewTargetTransform, FTransform_NetQuantize NewInitialRelCameraTransform, bool bZeroToHead)
-{
-	SeatInformation.StoredTargetTransform = NewTargetTransform;
-	SeatInformation.InitialRelCameraTransform = NewInitialRelCameraTransform;
-
-	// Purify the yaw of the initial rotation
-	SeatInformation.InitialRelCameraTransform.SetRotation(UVRExpansionFunctionLibrary::GetHMDPureYaw_I(NewInitialRelCameraTransform.Rotator()).Quaternion());
-
-	// #TODO: Need to handle non 1 scaled values here eventually
-	if (bZeroToHead)
-	{
-		FVector newLocation = SeatInformation.InitialRelCameraTransform.GetTranslation();
-		SeatInformation.StoredTargetTransform.AddToTranslation(FVector(0, 0, -newLocation.Z));
-	}
-
-	OnRep_SeatedCharInfo();
-}
-
-bool AVRBaseCharacter::Server_ReZeroSeating_Validate(FTransform_NetQuantize NewTargetTransform, FTransform_NetQuantize NewInitialRelCameraTransform, bool bZeroToHead)
-{
-	return true;
-}
-
-void AVRBaseCharacter::OnCustomMoveActionPerformed_Implementation(EVRMoveAction MoveActionType, FVector MoveActionVector, FRotator MoveActionRotator)
-{
-
-}
-
-void AVRBaseCharacter::OnBeginWallPushback_Implementation(FHitResult HitResultOfImpact, bool bHadLocomotionInput, FVector HmdInput)
-{
-
-}
-
-void AVRBaseCharacter::OnEndWallPushback_Implementation()
-{
-
-}
-
-void AVRBaseCharacter::OnClimbingSteppedUp_Implementation()
-{
-
-}
-
-void AVRBaseCharacter::Server_SendTransformCamera_Implementation(FBPVRComponentPosRep NewTransform)
-{
-	if(VRReplicatedCamera)
-		VRReplicatedCamera->Server_SendCameraTransform_Implementation(NewTransform);
-}
-
-bool AVRBaseCharacter::Server_SendTransformCamera_Validate(FBPVRComponentPosRep NewTransform)
-{
-	return true;
-	// Optionally check to make sure that player is inside of their bounds and deny it if they aren't?
-}
-
-void AVRBaseCharacter::Server_SendTransformLeftController_Implementation(FBPVRComponentPosRep NewTransform)
-{
-	if (LeftMotionController)
-		LeftMotionController->Server_SendControllerTransform_Implementation(NewTransform);
-}
-
-bool AVRBaseCharacter::Server_SendTransformLeftController_Validate(FBPVRComponentPosRep NewTransform)
-{
-	return true;
-	// Optionally check to make sure that player is inside of their bounds and deny it if they aren't?
-}
-
-void AVRBaseCharacter::Server_SendTransformRightController_Implementation(FBPVRComponentPosRep NewTransform)
-{
-	if(RightMotionController)
-		RightMotionController->Server_SendControllerTransform_Implementation(NewTransform);
-}
-
-bool AVRBaseCharacter::Server_SendTransformRightController_Validate(FBPVRComponentPosRep NewTransform)
-{
-	return true;
-	// Optionally check to make sure that player is inside of their bounds and deny it if they aren't?
-}
 FVector AVRBaseCharacter::GetTeleportLocation(FVector OriginalLocation)
-{	
+{
 	return OriginalLocation;
-}
-
-
-void AVRBaseCharacter::NotifyOfTeleport_Implementation()
-{
-	if (!IsLocallyControlled())
-	{
-		if (LeftMotionController)
-			LeftMotionController->bIsPostTeleport = true;
-
-		if (RightMotionController)
-			RightMotionController->bIsPostTeleport = true;
-	}
-}
-
-void AVRBaseCharacter::OnRep_SeatedCharInfo()
-{
-	// Handle setting up the player here
-
-	if (UPrimitiveComponent * root = Cast<UPrimitiveComponent>(GetRootComponent()))
-	{
-		if (SeatInformation.bSitting /*&& !SeatInformation.bWasSeated*/) // Removing WasSeated check because we may be switching seats
-		{
-			if (SeatInformation.bWasSeated)
-			{
-				if (SeatInformation.SeatParent != this->GetRootComponent()->GetAttachParent())
-				{
-					InitSeatedModeTransition();
-				}
-				else // Is just a reposition
-				{
-					//if (this->Role != ROLE_SimulatedProxy)
-					ZeroToSeatInformation();
-				}
-
-			}
-			else
-			{
-				if (this->Role == ROLE_SimulatedProxy)
-				{
-					/*if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
-					{
-						charMovement->SetMovementMode(MOVE_Custom, (uint8)EVRCustomMovementMode::VRMOVE_Seated);
-					}*/
-				}
-				else
-				{
-					if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
-					{
-						charMovement->SetMovementMode(MOVE_Custom, (uint8)EVRCustomMovementMode::VRMOVE_Seated);
-					}
-				}
-			}
-		}
-		else if (!SeatInformation.bSitting && SeatInformation.bWasSeated)
-		{
-			if (this->Role == ROLE_SimulatedProxy)
-			{
-
-				/*if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
-				{
-					charMovement->ApplyReplicatedMovementMode(SeatInformation.PostSeatedMovementMode);
-					//charMovement->SetComponentTickEnabled(true);
-				}*/
-
-			}
-			else
-			{
-				if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
-				{
-					charMovement->ApplyReplicatedMovementMode(SeatInformation.PostSeatedMovementMode);
-				}
-			}
-		}
-	}
 }
 
 void AVRBaseCharacter::InitSeatedModeTransition()
@@ -345,7 +310,7 @@ void AVRBaseCharacter::InitSeatedModeTransition()
 						if (ClientData->SavedMoves.Num())
 						{
 							// Ack our most recent move, we don't want to start sending old moves after un seating.
-							ClientData->AckMove(ClientData->SavedMoves.Num() - 1);
+							ClientData->AckMove(ClientData->SavedMoves.Num() - 1, *charMovement);
 						}
 					}
 
@@ -437,52 +402,276 @@ void AVRBaseCharacter::InitSeatedModeTransition()
 	}
 }
 
-void AVRBaseCharacter::TickSeatInformation(float DeltaTime)
+void AVRBaseCharacter::NotifyOfTeleport_Implementation()
 {
-	float LastThresholdScaler = SeatInformation.CurrentThresholdScaler;
-	bool bLastOverThreshold = SeatInformation.bIsOverThreshold;
-
-	FVector NewLoc = VRReplicatedCamera->RelativeLocation;
-	FVector OrigLocation = SeatInformation.InitialRelCameraTransform.GetTranslation();
-
-	if (!SeatInformation.bZeroToHead)
+	if (!IsLocallyControlled())
 	{
-		NewLoc.Z = 0.0f;
-		OrigLocation.Z = 0.0f;
+		if (LeftMotionController)
+			LeftMotionController->bIsPostTeleport = true;
+
+		if (RightMotionController)
+			RightMotionController->bIsPostTeleport = true;
+	}
+}
+
+void AVRBaseCharacter::OnBeginWallPushback_Implementation(FHitResult HitResultOfImpact, bool bHadLocomotionInput, FVector HmdInput)
+{
+
+}
+
+void AVRBaseCharacter::OnClimbingSteppedUp_Implementation()
+{
+
+}
+
+void AVRBaseCharacter::OnCustomMoveActionPerformed_Implementation(EVRMoveAction MoveActionType, FVector MoveActionVector, FRotator MoveActionRotator)
+{
+
+}
+
+void AVRBaseCharacter::OnEndWallPushback_Implementation()
+{
+
+}
+
+void AVRBaseCharacter::OnRep_PlayerState()
+{
+	OnPlayerStateReplicated_Bind.Broadcast(GetPlayerState());
+	Super::OnRep_PlayerState();
+}
+
+void AVRBaseCharacter::OnRep_SeatedCharInfo()
+{
+	// Handle setting up the player here
+
+	if (UPrimitiveComponent * root = Cast<UPrimitiveComponent>(GetRootComponent()))
+	{
+		if (SeatInformation.bSitting /*&& !SeatInformation.bWasSeated*/) // Removing WasSeated check because we may be switching seats
+		{
+			if (SeatInformation.bWasSeated)
+			{
+				if (SeatInformation.SeatParent != this->GetRootComponent()->GetAttachParent())
+				{
+					InitSeatedModeTransition();
+				}
+				else // Is just a reposition
+				{
+					//if (this->Role != ROLE_SimulatedProxy)
+					ZeroToSeatInformation();
+				}
+
+			}
+			else
+			{
+				if (this->Role == ROLE_SimulatedProxy)
+				{
+					/*if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
+					{
+						charMovement->SetMovementMode(MOVE_Custom, (uint8)EVRCustomMovementMode::VRMOVE_Seated);
+					}*/
+				}
+				else
+				{
+					if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
+					{
+						charMovement->SetMovementMode(MOVE_Custom, (uint8)EVRCustomMovementMode::VRMOVE_Seated);
+					}
+				}
+			}
+		}
+		else if (!SeatInformation.bSitting && SeatInformation.bWasSeated)
+		{
+			if (this->Role == ROLE_SimulatedProxy)
+			{
+
+				/*if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
+				{
+					charMovement->ApplyReplicatedMovementMode(SeatInformation.PostSeatedMovementMode);
+					//charMovement->SetComponentTickEnabled(true);
+				}*/
+
+			}
+			else
+			{
+				if (UVRBaseCharacterMovementComponent * charMovement = Cast<UVRBaseCharacterMovementComponent>(GetMovementComponent()))
+				{
+					charMovement->ApplyReplicatedMovementMode(SeatInformation.PostSeatedMovementMode);
+				}
+			}
+		}
+	}
+}
+
+void AVRBaseCharacter::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
+{
+	Super::PreReplication(ChangedPropertyTracker);
+
+	DOREPLIFETIME_ACTIVE_OVERRIDE(AVRBaseCharacter, ReplicatedCapsuleHeight, VRReplicateCapsuleHeight);
+}
+
+bool AVRBaseCharacter::Server_SetSeatedMode_Validate(USceneComponent * SeatParent, bool bSetSeatedMode, FTransform_NetQuantize TargetTransform, FTransform_NetQuantize InitialRelCameraTransform, float AllowedRadius, float AllowedRadiusThreshold, bool bZeroToHead, EVRConjoinedMovementModes PostSeatedMovementMode)
+{
+	return true;
+}
+
+void AVRBaseCharacter::Server_SetSeatedMode_Implementation(USceneComponent * SeatParent, bool bSetSeatedMode, FTransform_NetQuantize TargetTransform, FTransform_NetQuantize InitialRelCameraTransform, float AllowedRadius, float AllowedRadiusThreshold, bool bZeroToHead, EVRConjoinedMovementModes PostSeatedMovementMode)
+{
+	SetSeatedMode(SeatParent, bSetSeatedMode, TargetTransform, InitialRelCameraTransform, AllowedRadius, AllowedRadiusThreshold, bZeroToHead, PostSeatedMovementMode);
+}
+
+void AVRBaseCharacter::Server_ReZeroSeating_Implementation(FTransform_NetQuantize NewTargetTransform, FTransform_NetQuantize NewInitialRelCameraTransform, bool bZeroToHead)
+{
+	SeatInformation.StoredTargetTransform = NewTargetTransform;
+	SeatInformation.InitialRelCameraTransform = NewInitialRelCameraTransform;
+
+	// Purify the yaw of the initial rotation
+	SeatInformation.InitialRelCameraTransform.SetRotation(UVRExpansionFunctionLibrary::GetHMDPureYaw_I(NewInitialRelCameraTransform.Rotator()).Quaternion());
+
+	// #TODO: Need to handle non 1 scaled values here eventually
+	if (bZeroToHead)
+	{
+		FVector newLocation = SeatInformation.InitialRelCameraTransform.GetTranslation();
+		SeatInformation.StoredTargetTransform.AddToTranslation(FVector(0, 0, -newLocation.Z));
 	}
 
-	float AbsDistance = FMath::Abs(FVector::Dist(OrigLocation, NewLoc));
+	OnRep_SeatedCharInfo();
+}
 
-	//FTransform newTrans = SeatInformation.StoredTargetTransform * SeatInformation.SeatParent->GetComponentTransform();
+bool AVRBaseCharacter::Server_ReZeroSeating_Validate(FTransform_NetQuantize NewTargetTransform, FTransform_NetQuantize NewInitialRelCameraTransform, bool bZeroToHead)
+{
+	return true;
+}
 
-	// If over the allowed distance
-	if (AbsDistance > SeatInformation.AllowedRadius)
+void AVRBaseCharacter::Server_SendTransformCamera_Implementation(FBPVRComponentPosRep NewTransform)
+{
+	if(VRReplicatedCamera)
+		VRReplicatedCamera->Server_SendCameraTransform_Implementation(NewTransform);
+}
+
+bool AVRBaseCharacter::Server_SendTransformCamera_Validate(FBPVRComponentPosRep NewTransform)
+{
+	return true;
+	// Optionally check to make sure that player is inside of their bounds and deny it if they aren't?
+}
+
+void AVRBaseCharacter::Server_SendTransformLeftController_Implementation(FBPVRComponentPosRep NewTransform)
+{
+	if (LeftMotionController)
+		LeftMotionController->Server_SendControllerTransform_Implementation(NewTransform);
+}
+
+bool AVRBaseCharacter::Server_SendTransformLeftController_Validate(FBPVRComponentPosRep NewTransform)
+{
+	return true;
+	// Optionally check to make sure that player is inside of their bounds and deny it if they aren't?
+}
+
+void AVRBaseCharacter::Server_SendTransformRightController_Implementation(FBPVRComponentPosRep NewTransform)
+{
+	if(RightMotionController)
+		RightMotionController->Server_SendControllerTransform_Implementation(NewTransform);
+}
+
+bool AVRBaseCharacter::Server_SendTransformRightController_Validate(FBPVRComponentPosRep NewTransform)
+{
+	return true;
+	// Optionally check to make sure that player is inside of their bounds and deny it if they aren't?
+}
+
+FVector AVRBaseCharacter::SetActorLocationAndRotationVR(FVector NewLoc, FRotator NewRot, bool bUseYawOnly, bool bAccountForHMDRotation, bool bTeleport)
+{
+	AController* OwningController = GetController();
+
+	FVector NewLocation;
+	FRotator NewRotation;
+	FVector PivotPoint = GetActorTransform().InverseTransformPosition(GetVRLocation_Inline());
+	PivotPoint.Z = 0.0f;
+
+	if (bUseYawOnly)
 	{
-		// Force them back into range
-		FVector diff = NewLoc - OrigLocation;
-		diff.Normalize();
-		diff = (-diff * (AbsDistance - SeatInformation.AllowedRadius));
-
-		SetSeatRelativeLocationAndRotationVR(diff);
-		SeatInformation.bWasOverLimit = true;
+		NewRot.Pitch = 0.0f;
+		NewRot.Roll = 0.0f;
 	}
-	else if (SeatInformation.bWasOverLimit) // Make sure we are in the zero point otherwise
+
+	if (bAccountForHMDRotation)
 	{
-		SetSeatRelativeLocationAndRotationVR(FVector::ZeroVector);
-		SeatInformation.bWasOverLimit = false;
+		NewRotation = UVRExpansionFunctionLibrary::GetHMDPureYaw_I(VRReplicatedCamera->RelativeRotation);//bUseControllerRotationYaw && OwningController ? OwningController->GetControlRotation() : GetActorRotation();
+		NewRotation = (NewRotation.Quaternion().Inverse() * NewRot.Quaternion()).Rotator();
 	}
-
-	if (AbsDistance > SeatInformation.AllowedRadius - SeatInformation.AllowedRadiusThreshold)
-		SeatInformation.bIsOverThreshold = true;
 	else
-		SeatInformation.bIsOverThreshold = false;
+		NewRotation = NewRot;
 
-	SeatInformation.CurrentThresholdScaler = FMath::Clamp((AbsDistance - (SeatInformation.AllowedRadius - SeatInformation.AllowedRadiusThreshold)) / SeatInformation.AllowedRadiusThreshold, 0.0f, 1.0f);
+	NewLocation = NewLoc;// +PivotPoint;// NewRotation.RotateVector(PivotPoint);
+						 //NewRotation = NewRot;
+	NewLocation -= NewRotation.RotateVector(PivotPoint);
 
-	if (bLastOverThreshold != SeatInformation.bIsOverThreshold || !FMath::IsNearlyEqual(LastThresholdScaler, SeatInformation.CurrentThresholdScaler))
+	if (bUseControllerRotationYaw && OwningController /*&& IsLocallyControlled()*/)
+		OwningController->SetControlRotation(NewRotation);
+
+	// Also setting actor rot because the control rot transfers to it anyway eventually
+	SetActorLocationAndRotation(NewLocation, NewRotation, false, nullptr, bTeleport ? ETeleportType::TeleportPhysics : ETeleportType::None);
+	return NewLocation - NewLoc;
+}
+
+FVector AVRBaseCharacter::SetActorRotationVR(FRotator NewRot, bool bUseYawOnly, bool bAccountForHMDRotation)
+{
+	AController* OwningController = GetController();
+
+	FVector NewLocation;
+	FRotator NewRotation;
+	FVector OrigLocation = GetActorLocation();
+	FVector PivotPoint = GetActorTransform().InverseTransformPosition(GetVRLocation_Inline());
+	PivotPoint.Z = 0.0f;
+
+	FRotator OrigRotation = bUseControllerRotationYaw && OwningController ? OwningController->GetControlRotation() : GetActorRotation();
+
+	if (bUseYawOnly)
 	{
-		OnSeatThreshholdChanged(!SeatInformation.bIsOverThreshold, SeatInformation.CurrentThresholdScaler);
-		OnSeatThreshholdChanged_Bind.Broadcast(!SeatInformation.bIsOverThreshold, SeatInformation.CurrentThresholdScaler);
+		NewRot.Pitch = 0.0f;
+		NewRot.Roll = 0.0f;
+	}
+
+	if (bAccountForHMDRotation)
+	{
+		NewRotation = UVRExpansionFunctionLibrary::GetHMDPureYaw_I(VRReplicatedCamera->RelativeRotation);
+		NewRotation = (NewRot.Quaternion() * NewRotation.Quaternion().Inverse()).Rotator();
+	}
+	else
+		NewRotation = NewRot;
+
+	NewLocation = OrigLocation + OrigRotation.RotateVector(PivotPoint);
+	//NewRotation = NewRot;
+	NewLocation -= NewRotation.RotateVector(PivotPoint);
+
+	if (bUseControllerRotationYaw && OwningController /*&& IsLocallyControlled()*/)
+		OwningController->SetControlRotation(NewRotation);
+
+	// Also setting actor rot because the control rot transfers to it anyway eventually
+	SetActorLocationAndRotation(NewLocation, NewRotation);
+	return NewLocation - OrigLocation;
+}
+
+void AVRBaseCharacter::SetCharacterHalfHeightVR(float HalfHeight, bool bUpdateOverlaps)
+{
+	if (UCapsuleComponent * Capsule = Cast<UCapsuleComponent>(this->RootComponent))
+	{
+		if (!FMath::IsNearlyEqual(HalfHeight, Capsule->GetUnscaledCapsuleHalfHeight()))
+			Capsule->SetCapsuleHalfHeight(HalfHeight, bUpdateOverlaps);
+
+		if (GetNetMode() < ENetMode::NM_Client && VRReplicateCapsuleHeight)
+			ReplicatedCapsuleHeight.CapsuleHeight = Capsule->GetUnscaledCapsuleHalfHeight();
+	}
+}
+
+void AVRBaseCharacter::SetCharacterSizeVR(float NewRadius, float NewHalfHeight, bool bUpdateOverlaps)
+{
+	if (UCapsuleComponent * Capsule = Cast<UCapsuleComponent>(this->RootComponent))
+	{
+		if (!FMath::IsNearlyEqual(NewRadius, Capsule->GetUnscaledCapsuleRadius()) || !FMath::IsNearlyEqual(NewHalfHeight, Capsule->GetUnscaledCapsuleHalfHeight()))
+			Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, bUpdateOverlaps);
+
+		if (GetNetMode() < ENetMode::NM_Client && VRReplicateCapsuleHeight)
+			ReplicatedCapsuleHeight.CapsuleHeight = Capsule->GetUnscaledCapsuleHalfHeight();
 	}
 }
 
@@ -557,228 +746,51 @@ void AVRBaseCharacter::SetSeatRelativeLocationAndRotationVR(FVector DeltaLoc)
 	SetActorRelativeTransform(FTransform(NewRotation, NewLocation, GetCapsuleComponent()->RelativeScale3D));
 }
 
-
-FVector AVRBaseCharacter::AddActorWorldRotationVR(FRotator DeltaRot, bool bUseYawOnly)
+void AVRBaseCharacter::TickSeatInformation(float DeltaTime)
 {
-	AController* OwningController = GetController();
+	float LastThresholdScaler = SeatInformation.CurrentThresholdScaler;
+	bool bLastOverThreshold = SeatInformation.bIsOverThreshold;
 
-	FVector NewLocation;
-	FRotator NewRotation;
-	FVector OrigLocation = GetActorLocation();
-	FVector PivotPoint = GetActorTransform().InverseTransformPosition(GetVRLocation_Inline());
-	PivotPoint.Z = 0.0f;
+	FVector NewLoc = VRReplicatedCamera->RelativeLocation;
+	FVector OrigLocation = SeatInformation.InitialRelCameraTransform.GetTranslation();
 
-	NewRotation = bUseControllerRotationYaw && OwningController ? OwningController->GetControlRotation() : GetActorRotation();
-
-	if (bUseYawOnly)
+	if (!SeatInformation.bZeroToHead)
 	{
-		NewRotation.Pitch = 0.0f;
-		NewRotation.Roll = 0.0f;
+		NewLoc.Z = 0.0f;
+		OrigLocation.Z = 0.0f;
 	}
 
-	NewLocation = OrigLocation + NewRotation.RotateVector(PivotPoint);
-	NewRotation = (NewRotation.Quaternion() * DeltaRot.Quaternion()).Rotator();
-	NewLocation -= NewRotation.RotateVector(PivotPoint);
+	float AbsDistance = FMath::Abs(FVector::Dist(OrigLocation, NewLoc));
 
-	if (bUseControllerRotationYaw && OwningController /*&& IsLocallyControlled()*/)
-		OwningController->SetControlRotation(NewRotation);
+	//FTransform newTrans = SeatInformation.StoredTargetTransform * SeatInformation.SeatParent->GetComponentTransform();
 
-	// Also setting actor rot because the control rot transfers to it anyway eventually
-	SetActorLocationAndRotation(NewLocation, NewRotation);
-	return NewLocation - OrigLocation;
-}
-
-FVector AVRBaseCharacter::SetActorRotationVR(FRotator NewRot, bool bUseYawOnly, bool bAccountForHMDRotation)
-{
-	AController* OwningController = GetController();
-
-	FVector NewLocation;
-	FRotator NewRotation;
-	FVector OrigLocation = GetActorLocation();
-	FVector PivotPoint = GetActorTransform().InverseTransformPosition(GetVRLocation_Inline());
-	PivotPoint.Z = 0.0f;
-
-	FRotator OrigRotation = bUseControllerRotationYaw && OwningController ? OwningController->GetControlRotation() : GetActorRotation();
-
-	if (bUseYawOnly)
+	// If over the allowed distance
+	if (AbsDistance > SeatInformation.AllowedRadius)
 	{
-		NewRot.Pitch = 0.0f;
-		NewRot.Roll = 0.0f;
+		// Force them back into range
+		FVector diff = NewLoc - OrigLocation;
+		diff.Normalize();
+		diff = (-diff * (AbsDistance - SeatInformation.AllowedRadius));
+
+		SetSeatRelativeLocationAndRotationVR(diff);
+		SeatInformation.bWasOverLimit = true;
+	}
+	else if (SeatInformation.bWasOverLimit) // Make sure we are in the zero point otherwise
+	{
+		SetSeatRelativeLocationAndRotationVR(FVector::ZeroVector);
+		SeatInformation.bWasOverLimit = false;
 	}
 
-	if (bAccountForHMDRotation)
-	{
-		NewRotation = UVRExpansionFunctionLibrary::GetHMDPureYaw_I(VRReplicatedCamera->RelativeRotation);
-		NewRotation = (NewRot.Quaternion() * NewRotation.Quaternion().Inverse()).Rotator();
-	}
+	if (AbsDistance > SeatInformation.AllowedRadius - SeatInformation.AllowedRadiusThreshold)
+		SeatInformation.bIsOverThreshold = true;
 	else
-		NewRotation = NewRot;
+		SeatInformation.bIsOverThreshold = false;
 
-	NewLocation = OrigLocation + OrigRotation.RotateVector(PivotPoint);
-	//NewRotation = NewRot;
-	NewLocation -= NewRotation.RotateVector(PivotPoint);
+	SeatInformation.CurrentThresholdScaler = FMath::Clamp((AbsDistance - (SeatInformation.AllowedRadius - SeatInformation.AllowedRadiusThreshold)) / SeatInformation.AllowedRadiusThreshold, 0.0f, 1.0f);
 
-	if (bUseControllerRotationYaw && OwningController /*&& IsLocallyControlled()*/)
-		OwningController->SetControlRotation(NewRotation);
-
-	// Also setting actor rot because the control rot transfers to it anyway eventually
-	SetActorLocationAndRotation(NewLocation, NewRotation);
-	return NewLocation - OrigLocation;
-}
-
-FVector AVRBaseCharacter::SetActorLocationAndRotationVR(FVector NewLoc, FRotator NewRot, bool bUseYawOnly, bool bAccountForHMDRotation, bool bTeleport)
-{
-	AController* OwningController = GetController();
-
-	FVector NewLocation;
-	FRotator NewRotation;
-	FVector PivotPoint = GetActorTransform().InverseTransformPosition(GetVRLocation_Inline());
-	PivotPoint.Z = 0.0f;
-
-	if (bUseYawOnly)
+	if (bLastOverThreshold != SeatInformation.bIsOverThreshold || !FMath::IsNearlyEqual(LastThresholdScaler, SeatInformation.CurrentThresholdScaler))
 	{
-		NewRot.Pitch = 0.0f;
-		NewRot.Roll = 0.0f;
-	}
-
-	if (bAccountForHMDRotation)
-	{
-		NewRotation = UVRExpansionFunctionLibrary::GetHMDPureYaw_I(VRReplicatedCamera->RelativeRotation);//bUseControllerRotationYaw && OwningController ? OwningController->GetControlRotation() : GetActorRotation();
-		NewRotation = (NewRotation.Quaternion().Inverse() * NewRot.Quaternion()).Rotator();
-	}
-	else
-		NewRotation = NewRot;
-
-	NewLocation = NewLoc;// +PivotPoint;// NewRotation.RotateVector(PivotPoint);
-						 //NewRotation = NewRot;
-	NewLocation -= NewRotation.RotateVector(PivotPoint);
-
-	if (bUseControllerRotationYaw && OwningController /*&& IsLocallyControlled()*/)
-		OwningController->SetControlRotation(NewRotation);
-
-	// Also setting actor rot because the control rot transfers to it anyway eventually
-	SetActorLocationAndRotation(NewLocation, NewRotation, false, nullptr, bTeleport ? ETeleportType::TeleportPhysics : ETeleportType::None);
-	return NewLocation - NewLoc;
-}
-
-void AVRBaseCharacter::SetCharacterSizeVR(float NewRadius, float NewHalfHeight, bool bUpdateOverlaps)
-{
-	if (UCapsuleComponent * Capsule = Cast<UCapsuleComponent>(this->RootComponent))
-	{
-		if (!FMath::IsNearlyEqual(NewRadius, Capsule->GetUnscaledCapsuleRadius()) || !FMath::IsNearlyEqual(NewHalfHeight, Capsule->GetUnscaledCapsuleHalfHeight()))
-			Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, bUpdateOverlaps);
-
-		if (GetNetMode() < ENetMode::NM_Client && VRReplicateCapsuleHeight)
-			ReplicatedCapsuleHeight.CapsuleHeight = Capsule->GetUnscaledCapsuleHalfHeight();
-	}
-}
-
-void AVRBaseCharacter::SetCharacterHalfHeightVR(float HalfHeight, bool bUpdateOverlaps)
-{
-	if (UCapsuleComponent * Capsule = Cast<UCapsuleComponent>(this->RootComponent))
-	{
-		if (!FMath::IsNearlyEqual(HalfHeight, Capsule->GetUnscaledCapsuleHalfHeight()))
-			Capsule->SetCapsuleHalfHeight(HalfHeight, bUpdateOverlaps);
-
-		if (GetNetMode() < ENetMode::NM_Client && VRReplicateCapsuleHeight)
-			ReplicatedCapsuleHeight.CapsuleHeight = Capsule->GetUnscaledCapsuleHalfHeight();
-	}
-}
-
-void AVRBaseCharacter::ExtendedSimpleMoveToLocation(const FVector& GoalLocation, float AcceptanceRadius, bool bStopOnOverlap, bool bUsePathfinding, bool bProjectDestinationToNavigation, bool bCanStrafe, TSubclassOf<UNavigationQueryFilter> FilterClass, bool bAllowPartialPaths)
-{
-	UNavigationSystemV1* NavSys = Controller ? FNavigationSystem::GetCurrent<UNavigationSystemV1>(Controller->GetWorld()) : nullptr;
-	if (NavSys == nullptr || Controller == nullptr )
-	{
-		UE_LOG(LogBaseVRCharacter, Warning, TEXT("UVRSimpleCharacter::ExtendedSimpleMoveToLocation called for NavSys:%s Controller:%s (if any of these is None then there's your problem"),
-			*GetNameSafe(NavSys), *GetNameSafe(Controller));
-		return;
-	}
-
-	UPathFollowingComponent* PFollowComp = nullptr;
-	//Controller->InitNavigationControl(PFollowComp);
-	if (Controller)
-	{
-		// New for 4.20, spawning the missing path following component here if there isn't already one
-		PFollowComp = Controller->FindComponentByClass<UPathFollowingComponent>();
-		if (PFollowComp == nullptr)
-		{
-			PFollowComp = NewObject<UVRPathFollowingComponent>(Controller);
-			PFollowComp->RegisterComponentWithWorld(Controller->GetWorld());
-			PFollowComp->Initialize();
-		}
-	}
-
-	if (PFollowComp == nullptr)
-	{
-		UE_LOG(LogBaseVRCharacter, Warning, TEXT("ExtendedSimpleMoveToLocation - No PathFollowingComponent Found"));
-		return;
-	}
-
-	if (!PFollowComp->IsPathFollowingAllowed())
-	{
-		UE_LOG(LogBaseVRCharacter, Warning, TEXT("ExtendedSimpleMoveToLocation - Path Following Movement Is Not Set To Allowed"));
-		return;
-	}
-
-	EPathFollowingReachMode ReachMode;
-	if (bStopOnOverlap)
-		ReachMode = EPathFollowingReachMode::OverlapAgent;
-	else
-		ReachMode = EPathFollowingReachMode::ExactLocation;
-
-	bool bAlreadyAtGoal = false;
-
-	if(UVRPathFollowingComponent * pathcomp = Cast<UVRPathFollowingComponent>(PFollowComp))
-		bAlreadyAtGoal = pathcomp->HasReached(GoalLocation, /*EPathFollowingReachMode::OverlapAgent*/ReachMode);
-	else
-		bAlreadyAtGoal = PFollowComp->HasReached(GoalLocation, /*EPathFollowingReachMode::OverlapAgent*/ReachMode);
-
-	// script source, keep only one move request at time
-	if (PFollowComp->GetStatus() != EPathFollowingStatus::Idle)
-	{
-		if (GetNetMode() == ENetMode::NM_Client)
-		{
-			// Stop the movement here, not keeping the velocity because it bugs out for clients, might be able to fix.
-			PFollowComp->AbortMove(*NavSys, FPathFollowingResultFlags::ForcedScript | FPathFollowingResultFlags::NewRequest
-				, FAIRequestID::AnyRequest, /*bAlreadyAtGoal ? */EPathFollowingVelocityMode::Reset /*: EPathFollowingVelocityMode::Keep*/);
-		}
-		else
-		{
-			PFollowComp->AbortMove(*NavSys, FPathFollowingResultFlags::ForcedScript | FPathFollowingResultFlags::NewRequest
-				, FAIRequestID::AnyRequest, bAlreadyAtGoal ? EPathFollowingVelocityMode::Reset : EPathFollowingVelocityMode::Keep);
-		}
-	}
-
-	if (bAlreadyAtGoal)
-	{
-		PFollowComp->RequestMoveWithImmediateFinish(EPathFollowingResult::Success);
-	}
-	else
-	{
-		const ANavigationData* NavData = NavSys->GetNavDataForProps(Controller->GetNavAgentPropertiesRef());
-		if (NavData)
-		{
-			FPathFindingQuery Query(Controller, *NavData, Controller->GetNavAgentLocation(), GoalLocation);
-			FPathFindingResult Result = NavSys->FindPathSync(Query);
-			if (Result.IsSuccessful())
-			{
-				FAIMoveRequest MoveReq(GoalLocation);
-				MoveReq.SetUsePathfinding(bUsePathfinding);
-				MoveReq.SetAllowPartialPath(bAllowPartialPaths);
-				MoveReq.SetProjectGoalLocation(bProjectDestinationToNavigation);
-				MoveReq.SetNavigationFilter(*FilterClass ? FilterClass : DefaultNavigationFilterClass);
-				MoveReq.SetAcceptanceRadius(AcceptanceRadius);
-				MoveReq.SetReachTestIncludesAgentRadius(bStopOnOverlap);
-				MoveReq.SetCanStrafe(bCanStrafe);
-				MoveReq.SetReachTestIncludesGoalRadius(true);
-
-				PFollowComp->RequestMove(/*FAIMoveRequest(GoalLocation)*/MoveReq, Result.Path);
-			}
-			else if (PFollowComp->GetStatus() != EPathFollowingStatus::Idle)
-			{
-				PFollowComp->RequestMoveWithImmediateFinish(EPathFollowingResult::Invalid);
-			}
-		}
+		OnSeatThreshholdChanged(!SeatInformation.bIsOverThreshold, SeatInformation.CurrentThresholdScaler);
+		OnSeatThreshholdChanged_Bind.Broadcast(!SeatInformation.bIsOverThreshold, SeatInformation.CurrentThresholdScaler);
 	}
 }

@@ -408,7 +408,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "VRExpansionLibrary|FVectorNetQuantize", meta = (Scale = "1,1,1", Keywords = "construct build", NativeMakeFunc))
 		static FVector_NetQuantize100 MakeVector_NetQuantize100(FVector InVector);
 
-
 		// #TODO: probably need to implement this some day
 	// This doesn't work for the web browser widget but it does for the normal widgets like text boxes
 	// Just have to SetKeyboardFocus or SetUserFocus for the input widget first

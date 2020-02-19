@@ -10,9 +10,11 @@
 #include "Components/PrimitiveComponent.h"
 
 #include "PhysicsPublic.h"
+#include "PhysicsEngine/ConstraintDrives.h"
+
 #if WITH_PHYSX
-#include "PhysXPublic.h"
-#include "PhysXSupport.h"
+//#include "PhysXPublic.h"
+//#include "PhysicsEngine/PhysXSupport.h"
 #endif // WITH_PHYSX
 
 // IWVR
@@ -37,22 +39,11 @@
 class UVRGripScriptBase;   // Not sure why this is here...
 
 
-
-// Constants ---------------------------------------------------------------------------------------\
-
-// Some static vars so we don't have to keep calculating these for our Smallest Three compression.
-namespace TransNetQuant
-{
-	static const float MinimumQ    = -1.0f                   / 1.414214f              ;
-	static const float MaximumQ    = +1.0f                   / 1.414214f              ;
-	static const float MinMaxQDiff = TransNetQuant::MaximumQ - TransNetQuant::MinimumQ;
-}
-
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+// Constants ---------------------------------------------------------------------------------------\/
 
 
 
-// Enums ----------------------------------------------------------------------------------------------------------------\
+// Enums ----------------------------------------------------------------------------------------------------------------\/
 
 // Custom movement modes for the characters.
 UENUM(BlueprintType)
@@ -171,12 +162,12 @@ enum class EGripInterfaceTeleportBehavior : uint8
 
 
 
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//
 
 
-// Structures ----------------------------------------------------------------------------------------------------------------------------\
+// Structures ----------------------------------------------------------------------------------------------------------------------------\/
 
-// FBPVRWaistTracking_Info -------------------------------------------------------------------------------------\
+// FBPVRWaistTracking_Info -------------------------------------------------------------------------------------\/
 
 USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
 struct VREXPANSIONPLUGIN_API FBPVRWaistTracking_Info
@@ -208,9 +199,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Settings") UPrimitiveComponent *  TrackedDevice  ;   // Tracked parent reference.
 };
 
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//
 
-// FBPVRComponentPosRep ----------------------------------------------------------------------------------------------------\
+// FBPVRComponentPosRep ----------------------------------------------------------------------------------------------------\/
 
 USTRUCT()
 struct VREXPANSIONPLUGIN_API FBPVRComponentPosRep
@@ -264,9 +255,9 @@ struct TStructOpsTypeTraits< FBPVRComponentPosRep > : public TStructOpsTypeTrait
 	};
 };
 
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//
 
-// FBPInterfaceProperties \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+// FBPInterfaceProperties \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
 USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
 struct VREXPANSIONPLUGIN_API FBPInterfaceProperties
@@ -291,7 +282,8 @@ public:
 		ConstraintBreakDistance(0.0f                                                     ),
 		SecondarySlotRange     (20.0f                                                    ),
 		PrimarySlotRange       (20.0f                                                    ),
-		bIsHeld                (false                                                    )
+		bIsHeld                (false                                                    ),
+		bWasHeld               (false                                                    )
 	{
 	}
 		
@@ -317,11 +309,12 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, NotReplicated, Category = "VRGripInterface") bool                bIsHeld           ;   // Set on grip notify, not net serializing
 	UPROPERTY(BlueprintReadWrite, NotReplicated, Category = "VRGripInterface") TArray<FBPGripPair> HoldingControllers;   // Set on grip notify, not net serializing
+	bool bWasHeld;
 };
 
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//
 
-// FBPActorPhysicsHandleInformation \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+// FBPActorPhysicsHandleInformation \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/
 
 USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
 struct VREXPANSIONPLUGIN_API FBPActorPhysicsHandleInformation
@@ -333,12 +326,11 @@ public:
 
 	FBPActorPhysicsHandleInformation() :
 		HandledObject   (nullptr                           ),
-		bSetCOM         (false                             ),
+		bSetCOM			(false							   ),
+		LastPhysicsTransform(FTransform::Identity          ),
+		COMPosition     (FTransform::Identity              ),
 		RootBoneRotation(FTransform::Identity              ),
-		GripID          (INVALID_VRGRIP_ID                 ),
-		HandleData      (NULL                              ),
-		KinActorData    (NULL                              ),
-		COMPosition     (U2PTransform(FTransform::Identity))
+		GripID          (INVALID_VRGRIP_ID                 )
 	{}
 
 
@@ -354,16 +346,128 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Settings") UObject * HandledObject;
 
-	bool       bSetCOM         ;
+	bool                bSetCOM      ;
+	FPhysicsActorHandle KinActorData2;
+	FPhysicsConstraintHandle HandleData2;
+	FLinearDriveConstraint LinConstraint;
+	FAngularDriveConstraint AngConstraint;
+
+	FTransform LastPhysicsTransform;
+	FTransform COMPosition;
 	FTransform RootBoneRotation;
 	uint8      GripID          ;
-
-	physx::PxD6Joint*      HandleData  ;   /** Pointer to PhysX joint used by the handle*/
-	physx::PxRigidDynamic* KinActorData;   /** Pointer to kinematic actor jointed to grabbed object */
-	physx::PxTransform     COMPosition ;
 
 	/** Physics scene index of the body we are grabbing. */
 	//int32 SceneIndex; // No longer needed, retrieved at runtime
 };
 
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
+struct VREXPANSIONPLUGIN_API FBPAdvancedPhysicsHandleAxisSettings
+{
+	GENERATED_BODY()
+public:
+	/** The spring strength of the drive. Force proportional to the position error. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Constraint, meta = (ClampMin = "0.0"))
+		float Stiffness;
+
+	/** The damping strength of the drive. Force proportional to the velocity error. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Constraint, meta = (ClampMin = "0.0"))
+		float Damping;
+
+	/** The force limit of the drive. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Constraint, meta = (ClampMin = "0.0"))
+		float MaxForce;
+
+	/** Enables/Disables position drive (orientation if using angular drive)*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Constraint)
+		bool bEnablePositionDrive;
+
+	/** Enables/Disables velocity drive (damping) (angular velocity if using angular drive) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Constraint)
+		bool bEnableVelocityDrive;
+
+	FBPAdvancedPhysicsHandleAxisSettings()
+	{
+		Stiffness = 0.f;
+		Damping = 0.f;
+		MaxForce = MAX_FLT;
+		bEnablePositionDrive = true;
+		bEnableVelocityDrive = true;
+	}
+
+	void FillFrom(FConstraintDrive& ConstraintDrive)
+	{
+		Damping = ConstraintDrive.Damping;
+		Stiffness = ConstraintDrive.Stiffness;
+		MaxForce = ConstraintDrive.MaxForce;
+		bEnablePositionDrive = ConstraintDrive.bEnablePositionDrive;
+		bEnableVelocityDrive = ConstraintDrive.bEnableVelocityDrive;
+	}
+
+	void FillTo(FConstraintDrive& ConstraintDrive) const
+	{
+		ConstraintDrive.Damping = Damping;
+		ConstraintDrive.Stiffness = Stiffness;
+		ConstraintDrive.MaxForce = MaxForce;
+		ConstraintDrive.bEnablePositionDrive = bEnablePositionDrive;
+		ConstraintDrive.bEnableVelocityDrive = bEnableVelocityDrive;
+	}
+
+};
+
+USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
+struct VREXPANSIONPLUGIN_API FBPAdvancedPhysicsHandleSettings
+{
+	GENERATED_BODY()
+public:
+
+	// The settings for the XAxis
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Linear Constraint Settings")
+		FBPAdvancedPhysicsHandleAxisSettings XAxisSettings;
+
+	// The settings for the YAxis
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Linear Constraint Settings")
+		FBPAdvancedPhysicsHandleAxisSettings YAxisSettings;
+
+	// The settings for the ZAxis
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Linear Constraint Settings")
+		FBPAdvancedPhysicsHandleAxisSettings ZAxisSettings;
+
+	// The settings for the Orientation (Slerp only for now)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Angular Constraint Settings")
+		FBPAdvancedPhysicsHandleAxisSettings SlerpSettings;
+
+
+	// FConstraintSettings // settings for various things like distance limits
+	// Add a deletegate bindable in the motion controller
+
+	bool FillFrom(FBPActorPhysicsHandleInformation* HandleInfo)
+	{
+		if (!HandleInfo)
+			return false;
+
+		XAxisSettings.FillFrom(HandleInfo->LinConstraint.XDrive);
+		YAxisSettings.FillFrom(HandleInfo->LinConstraint.YDrive);
+		ZAxisSettings.FillFrom(HandleInfo->LinConstraint.ZDrive);
+
+		SlerpSettings.FillFrom(HandleInfo->AngConstraint.SlerpDrive);
+
+		return true;
+	}
+
+	bool FillTo(FBPActorPhysicsHandleInformation* HandleInfo) const
+	{
+		if (!HandleInfo)
+			return false;
+
+		XAxisSettings.FillTo(HandleInfo->LinConstraint.XDrive);
+		YAxisSettings.FillTo(HandleInfo->LinConstraint.YDrive);
+		ZAxisSettings.FillTo(HandleInfo->LinConstraint.ZDrive);
+
+		SlerpSettings.FillTo(HandleInfo->AngConstraint.SlerpDrive);
+
+		return true;
+	}
+};
+
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//

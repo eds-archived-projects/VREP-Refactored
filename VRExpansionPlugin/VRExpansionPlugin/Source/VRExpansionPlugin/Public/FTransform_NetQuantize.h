@@ -8,16 +8,25 @@
 #include "UObject/Class.h"
 
 // IWVR
+
+// UHeader Tool
 #include "FTransform_NetQuantize.generated.h"
 
 
+// Some static vars so we don't have to keep calculating these for our Smallest Three compression.
+namespace TransNetQuant
+{
+	static const float MinimumQ = -1.0f / 1.414214f;
+	static const float MaximumQ = +1.0f / 1.414214f;
+	static const float MinMaxQDiff = TransNetQuant::MaximumQ - TransNetQuant::MinimumQ;
+}
 
 
 USTRUCT
 (
   //noexport                                                                                                        , 
 	BlueprintType                                                                                                   , 
-	Category       = "VRExpansionLibrary|Transform"                                                                 , 
+	Category       = "VRExpansionLibrary|TransformNetQuantize"                                                                 , 
 	meta           = (HasNativeMake = "VRExpansionPlugin.VRExpansionPluginFunctionLibrary.MakeTransform_NetQuantize", 
 	HasNativeBreak = "VRExpansionPlugin.VRExpansionPluginFunctionLibrary.BreakTransform_NetQuantize")
 )

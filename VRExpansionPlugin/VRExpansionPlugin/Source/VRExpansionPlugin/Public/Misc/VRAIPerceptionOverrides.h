@@ -1,13 +1,21 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
+
+// Includes
+
+
+// Unreal
 #include "CoreMinimal.h"
 #include "UObject/ObjectMacros.h"
-#include "VRBaseCharacter.h"
 #include "AIModule/Classes/GenericTeamAgentInterface.h"
 #include "AIModule/Classes/Perception/AISense.h"
 #include "AIModule/Classes/Perception/AISenseConfig.h"
 
+// VREP
+#include "VRBaseCharacter.h"
+
+// UHeader Tool
 #include "VRAIPerceptionOverrides.generated.h"
 
 class IAISightTargetInterface;
@@ -45,10 +53,14 @@ public:
 		FAISenseAffiliationFilter DetectionByAffiliation;
 
 	/** If not an InvalidRange (which is the default), we will always be able to see the target that has already been seen if they are within this range of their last seen location. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sense", config, meta = (UIMin = 0.0, ClampMin = 0.0))
+  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sense", config)
 		float AutoSuccessRangeFromLastSeenLocation;
 
 	virtual TSubclassOf<UAISense> GetSenseImplementation() const override;
+
+#if WITH_EDITOR
+    virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
+#endif // WITH_EDITOR
 
 #if WITH_GAMEPLAY_DEBUGGER
 	virtual void DescribeSelfToGameplayDebugger(const UAIPerceptionComponent* PerceptionComponent, FGameplayDebuggerCategory* DebuggerCategory) const;
@@ -72,7 +84,7 @@ struct VREXPANSIONPLUGIN_API FAISightEventVR
 {
 	GENERATED_USTRUCT_BODY()
 
-		typedef UAISense_Sight_VR FSenseClass;
+	typedef UAISense_Sight_VR FSenseClass;
 
 	float Age;
 	ESightPerceptionEventNameVR::Type EventType;
@@ -83,6 +95,7 @@ struct VREXPANSIONPLUGIN_API FAISightEventVR
 	UPROPERTY()
 		AActor* Observer;
 
+	// Constructor & Destructor
 	FAISightEventVR() : SeenActor(nullptr), Observer(nullptr) {}
 
 	FAISightEventVR(AActor* InSeenActor, AActor* InObserver, ESightPerceptionEventNameVR::Type InEventType)
@@ -126,6 +139,7 @@ struct FAISightQueryVR
 
 	uint32 bLastResult : 1;
 
+	// Constructor & Destructor
 	FAISightQueryVR(FPerceptionListenerID ListenerId = FPerceptionListenerID::InvalidID(), FAISightTargetVR::FTargetId Target = FAISightTargetVR::InvalidTargetId)
 		: ObserverId(ListenerId), TargetId(Target), Age(0), Score(0), Importance(0), LastSeenLocation(FAISystem::InvalidLocation), bLastResult(false)
 	{
@@ -174,12 +188,25 @@ public:
 	};
 
 	typedef TMap<FAISightTargetVR::FTargetId, FAISightTargetVR> FTargetsContainer;
-	FTargetsContainer ObservedTargets;
 	TMap<FPerceptionListenerID, FDigestedSightProperties> DigestedProperties;
-
+	FTargetsContainer ObservedTargets;
 	TArray<FAISightQueryVR> SightQueryQueue;
 
 protected:
+
+	ECollisionChannel DefaultSightCollisionChannel;
+
+	float HighImportanceDistanceSquare;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
+		float HighImportanceQueryDistanceThreshold;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
+		double MaxTimeSlicePerTick;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
+		float MaxQueryImportance;
+
 	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
 		int32 MaxTracesPerTick;
 
@@ -187,22 +214,14 @@ protected:
 		int32 MinQueriesPerTimeSliceCheck;
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
-		double MaxTimeSlicePerTick;
-
-	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
-		float HighImportanceQueryDistanceThreshold;
-
-	float HighImportanceDistanceSquare;
-
-	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
-		float MaxQueryImportance;
-
-	UPROPERTY(EditDefaultsOnly, Category = "AI Perception", config)
 		float SightLimitQueryImportance;
 
-	ECollisionChannel DefaultSightCollisionChannel;
-
 public:
+
+	virtual void CleanseInvalidSources() override;
+
+	virtual void OnListenerForgetsActor(const FPerceptionListener& Listener, AActor& ActorToForget) override;
+	virtual void OnListenerForgetsAll(const FPerceptionListener& Listener) override;
 
 	virtual void PostInitProperties() override;
 
@@ -210,21 +229,19 @@ public:
 
 	virtual void RegisterSource(AActor& SourceActors) override;
 	virtual void UnregisterSource(AActor& SourceActor) override;
-	virtual void CleanseInvalidSources() override;
 
-	virtual void OnListenerForgetsActor(const FPerceptionListener& Listener, AActor& ActorToForget) override;
-	virtual void OnListenerForgetsAll(const FPerceptionListener& Listener) override;
+
+
 
 protected:
-	virtual float Update() override;
-
-	virtual bool ShouldAutomaticallySeeTarget(const FDigestedSightProperties& PropDigest, FAISightQueryVR* SightQuery, FPerceptionListener& Listener, AActor* TargetActor, float& OutStimulusStrength) const;
-
-	void OnNewListenerImpl(const FPerceptionListener& NewListener);
-	void OnListenerUpdateImpl(const FPerceptionListener& UpdatedListener);
-	void OnListenerRemovedImpl(const FPerceptionListener& UpdatedListener);
+	float CalcQueryImportance(const FPerceptionListener& Listener, const FVector& TargetLocation, const float SightRadiusSq) const;
 
 	void GenerateQueriesForListener(const FPerceptionListener& Listener, const FDigestedSightProperties& PropertyDigest);
+    void GenerateQueriesForListener(const FPerceptionListener& Listener, const FDigestedSightProperties& PropertyDigest, TFunctionRef<void(FAISightQueryVR&)> OnAddedFunc);
+
+	void OnListenerUpdateImpl(const FPerceptionListener& UpdatedListener);
+	void OnListenerRemovedImpl(const FPerceptionListener& UpdatedListener);
+	void OnNewListenerImpl(const FPerceptionListener& NewListener);
 
 	enum FQueriesOperationPostProcess
 	{
@@ -232,12 +249,16 @@ protected:
 		Sort
 	};
 	void RemoveAllQueriesByListener(const FPerceptionListener& Listener, FQueriesOperationPostProcess PostProcess);
+	void RemoveAllQueriesByListener(const FPerceptionListener& Listener, FQueriesOperationPostProcess PostProcess, TFunctionRef<void(const FAISightQueryVR&)> OnRemoveFunc);
 	void RemoveAllQueriesToTarget(const FAISightTargetVR::FTargetId& TargetId, FQueriesOperationPostProcess PostProcess);
+	void RemoveAllQueriesToTarget(const FAISightTargetVR::FTargetId& TargetId, FQueriesOperationPostProcess PostProcess, TFunctionRef<void(const FAISightQueryVR&)> OnRemoveFunc);
 
 	/** returns information whether new LoS queries have been added */
 	bool RegisterTarget(AActor& TargetActor, FQueriesOperationPostProcess PostProcess);
+	bool RegisterTarget(AActor& TargetActor, FQueriesOperationPostProcess PostProcess, TFunctionRef<void(FAISightQueryVR&)> OnAddedFunc);
 
+	virtual bool ShouldAutomaticallySeeTarget(const FDigestedSightProperties& PropDigest, FAISightQueryVR* SightQuery, FPerceptionListener& Listener, AActor* TargetActor, float& OutStimulusStrength) const;
 	FORCEINLINE void SortQueries() { SightQueryQueue.Sort(FAISightQueryVR::FSortPredicate()); }
 
-	float CalcQueryImportance(const FPerceptionListener& Listener, const FVector& TargetLocation, const float SightRadiusSq) const;
+	virtual float Update() override;
 };

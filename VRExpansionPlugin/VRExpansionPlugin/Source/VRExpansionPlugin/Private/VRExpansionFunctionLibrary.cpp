@@ -442,16 +442,6 @@ USceneComponent* UVRExpansionFunctionLibrary::AddSceneComponentByClass(UObject* 
 	return nullptr;
 }
 
-uint8 UVRExpansionFunctionLibrary::Conv_GripPairToGripID(const FBPGripPair &GripPair)
-{
-	return GripPair.GripID;
-}
-
-UGripMotionControllerComponent * UVRExpansionFunctionLibrary::Conv_GripPairToMotionController(const FBPGripPair &GripPair)
-{
-	return GripPair.HoldingController;
-}
-
 void UVRExpansionFunctionLibrary::BreakTransform_NetQuantize(const FTransform_NetQuantize& InTransform, FVector& Translation, FRotator& Rotation, FVector& Scale)
 {
 	Translation = InTransform.GetLocation();
@@ -462,6 +452,16 @@ void UVRExpansionFunctionLibrary::BreakTransform_NetQuantize(const FTransform_Ne
 FTransform_NetQuantize UVRExpansionFunctionLibrary::Conv_TransformToTransformNetQuantize(const FTransform &InTransform)
 {
 	return FTransform_NetQuantize(InTransform);
+}
+
+UGripMotionControllerComponent * UVRExpansionFunctionLibrary::Conv_GripPairToMotionController(const FBPGripPair &GripPair)
+{
+	return GripPair.HoldingController;
+}
+
+uint8 UVRExpansionFunctionLibrary::Conv_GripPairToGripID(const FBPGripPair &GripPair)
+{
+	return GripPair.GripID;
 }
 
 FVector_NetQuantize UVRExpansionFunctionLibrary::Conv_FVectorToFVectorNetQuantize(const FVector &InVector)

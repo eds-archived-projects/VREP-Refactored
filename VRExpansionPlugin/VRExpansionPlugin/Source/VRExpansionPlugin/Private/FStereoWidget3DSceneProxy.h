@@ -73,7 +73,7 @@ public:
 
 						FTransform GeomTransform(GetLocalToWorld());
 
-						InBodySetup->AggGeom.GetAggGeom(GeomTransform, GetWireframeColor().ToFColor(true), SolidMaterialInstance, false, true, UseEditorDepthTest(), ViewIndex, Collector);
+						InBodySetup->AggGeom.GetAggGeom(GeomTransform, GetWireframeColor().ToFColor(true), SolidMaterialInstance, false, true, DrawsVelocity(), ViewIndex, Collector);
 					}
 					else   // Wireframe
 					{
@@ -94,7 +94,7 @@ public:
 							nullptr             , 
 							false               , 
 							false               , 
-							UseEditorDepthTest(), 
+							DrawsVelocity(), 
 							ViewIndex           , 
 							Collector
 						);
@@ -146,6 +146,13 @@ public:
 
 		const FMatrix& ViewportLocalToWorld = GetLocalToWorld();
 
+		FMatrix PreviousLocalToWorld;
+
+		if (!GetScene().GetPreviousLocalToWorld(GetPrimitiveSceneInfo(), PreviousLocalToWorld))
+		{
+			PreviousLocalToWorld = GetLocalToWorld();
+		}
+
 		if (RenderTarget)//false)//RenderTarget)
 		{
 			FTextureResource* TextureResource = RenderTarget->Resource;
@@ -175,7 +182,11 @@ public:
 							MeshBuilder.AddTriangle(VertexIndices[0], VertexIndices[1], VertexIndices[2]);
 							MeshBuilder.AddTriangle(VertexIndices[0], VertexIndices[2], VertexIndices[3]);
 
-							MeshBuilder.GetMesh(ViewportLocalToWorld, ParentMaterialProxy, SDPG_World, false, true, ViewIndex, Collector);
+              FDynamicMeshBuilderSettings Settings;
+              Settings.bDisableBackfaceCulling = false;
+              Settings.bReceivesDecals = true;
+              Settings.bUseSelectionOutline = true;
+              MeshBuilder.GetMesh(ViewportLocalToWorld, PreviousLocalToWorld, ParentMaterialProxy, SDPG_World, Settings, nullptr, ViewIndex, Collector, FHitProxyId());						
 						}
 					}
 				}
@@ -255,7 +266,12 @@ public:
 								LastTangentY = TangentY;
 								LastTangentZ = TangentZ;
 							}
-							MeshBuilder.GetMesh(ViewportLocalToWorld, ParentMaterialProxy, SDPG_World, false, true, ViewIndex, Collector);
+
+							FDynamicMeshBuilderSettings Settings;
+							Settings.bDisableBackfaceCulling = false;
+							Settings.bReceivesDecals = true;
+							Settings.bUseSelectionOutline = true;
+							MeshBuilder.GetMesh(ViewportLocalToWorld, PreviousLocalToWorld, ParentMaterialProxy, SDPG_World, Settings, nullptr, ViewIndex, Collector, FHitProxyId());
 						}
 					}
 				}

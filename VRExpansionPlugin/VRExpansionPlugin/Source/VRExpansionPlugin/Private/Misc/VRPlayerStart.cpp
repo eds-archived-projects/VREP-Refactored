@@ -1,8 +1,17 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Misc/VRPlayerStart.h"
 
 
+
+// AVRPlayerStart
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 AVRPlayerStart::AVRPlayerStart(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {

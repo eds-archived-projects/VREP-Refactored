@@ -239,7 +239,7 @@ ESecondaryGripType UGrippableSkeletalMeshComponent::SecondaryGripType_Implementa
 	return VRGripInterfaceSettings.SecondaryGripType;
 }
 
-void UGrippableSkeletalMeshComponent::SetHeld_Implementation(UGripMotionControllerComponent* HoldingController, uint8 GripID, bool bIsHeld)
+void UGrippableSkeletalMeshComponent::SetHeld_Implementation(UGripMotionControllerComponent * HoldingController, uint8 GripID, bool bIsHeld)
 {
 	if (bIsHeld)
 	{
@@ -250,6 +250,7 @@ void UGrippableSkeletalMeshComponent::SetHeld_Implementation(UGripMotionControll
 			bReplicateMovement = false;
 		}
 
+		VRGripInterfaceSettings.bWasHeld = true;
 		VRGripInterfaceSettings.HoldingControllers.AddUnique(FBPGripPair(HoldingController, GripID));
 	}
 	else

@@ -1,9 +1,22 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Interactibles/VRSliderComponent.h"
+
+// Unreal
 #include "Net/UnrealNetwork.h"
 
-  //=============================================================================
+// VREP
+
+
+
+// UVRSliderComponent
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 UVRSliderComponent::UVRSliderComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -63,6 +76,51 @@ UVRSliderComponent::~UVRSliderComponent()
 {
 }
 
+// Functions
+
+void UVRSliderComponent::BeginPlay()
+{
+	// Call the base class 
+	Super::BeginPlay();
+
+	CalculateSliderProgress();
+
+	bOriginalReplicatesMovement = bReplicateMovement;
+}
+
+void UVRSliderComponent::CheckSliderProgress()
+{
+	// Skip first check, this will skip an event throw on rounded
+	if (LastSliderProgressState < 0.0f)
+	{
+		// Skip first tick, this is our resting position
+		LastSliderProgressState = CurrentSliderProgress;
+	}
+	else if ((LastSliderProgressState != CurrentSliderProgress) || bHitEventThreshold)
+	{
+		if ((!bSliderUsesSnapPoints && (CurrentSliderProgress == 1.0f || CurrentSliderProgress == 0.0f)) ||
+			(bSliderUsesSnapPoints && FMath::IsNearlyEqual(FMath::Fmod(CurrentSliderProgress, SnapIncrement), 0.0f))
+			)
+		{
+			// I am working with exacts here because of the clamping, it should actually work with no precision issues
+			// I wanted to ABS(Last-Cur) == 1.0 but it would cause an initial miss on whatever one last was inited to. 
+
+			if (!bSliderUsesSnapPoints)
+				LastSliderProgressState = FMath::RoundToFloat(CurrentSliderProgress); // Ensure it is rounded to 0 or 1
+			else
+				LastSliderProgressState = CurrentSliderProgress;
+
+			ReceiveSliderHitPoint(LastSliderProgressState);
+			OnSliderHitPoint.Broadcast(LastSliderProgressState);
+			bHitEventThreshold = false;
+		}
+	}
+
+	if (FMath::Abs(LastSliderProgressState - CurrentSliderProgress) >= EventThrowThreshold)
+	{
+		bHitEventThreshold = true;
+	}
+}
 
 void UVRSliderComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
 {
@@ -75,22 +133,6 @@ void UVRSliderComponent::GetLifetimeReplicatedProps(TArray< class FLifetimePrope
 	DOREPLIFETIME(UVRSliderComponent, bRepGameplayTags);
 	DOREPLIFETIME(UVRSliderComponent, bReplicateMovement);
 	DOREPLIFETIME_CONDITION(UVRSliderComponent, GameplayTags, COND_Custom);
-}
-
-void UVRSliderComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
-{
-	Super::PreReplication(ChangedPropertyTracker);
-
-	// Replicate the levers initial transform if we are replicating movement
-	//DOREPLIFETIME_ACTIVE_OVERRIDE(UVRSliderComponent, InitialRelativeTransform, bReplicateMovement);
-	//DOREPLIFETIME_ACTIVE_OVERRIDE(UVRSliderComponent, SplineComponentToFollow, bReplicateMovement);
-
-	// Don't replicate if set to not do it
-	DOREPLIFETIME_ACTIVE_OVERRIDE(UVRSliderComponent, GameplayTags, bRepGameplayTags);
-
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
 }
 
 void UVRSliderComponent::OnRegister()
@@ -108,14 +150,20 @@ void UVRSliderComponent::OnRegister()
 	}
 }
 
-void UVRSliderComponent::BeginPlay()
+void UVRSliderComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
 {
-	// Call the base class 
-	Super::BeginPlay();
+	Super::PreReplication(ChangedPropertyTracker);
 
-	CalculateSliderProgress();
+	// Replicate the levers initial transform if we are replicating movement
+	//DOREPLIFETIME_ACTIVE_OVERRIDE(UVRSliderComponent, InitialRelativeTransform, bReplicateMovement);
+	//DOREPLIFETIME_ACTIVE_OVERRIDE(UVRSliderComponent, SplineComponentToFollow, bReplicateMovement);
 
-	bOriginalReplicatesMovement = bReplicateMovement;
+	// Don't replicate if set to not do it
+	DOREPLIFETIME_ACTIVE_OVERRIDE(UVRSliderComponent, GameplayTags, bRepGameplayTags);
+
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
 }
 
 void UVRSliderComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
@@ -184,7 +232,171 @@ void UVRSliderComponent::TickComponent(float DeltaTime, enum ELevelTick TickType
 	}
 }
 
-void UVRSliderComponent::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime) 
+// IVRGripInterface Implementation.
+
+FBPAdvGripSettings UVRSliderComponent::AdvancedGripSettings_Implementation()
+{
+	return FBPAdvGripSettings(GripPriority);
+}
+
+bool UVRSliderComponent::AllowsMultipleGrips_Implementation()
+{
+	return false;
+}
+
+void UVRSliderComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
+{
+	bHadSlotInRange = false;
+}
+
+bool UVRSliderComponent::DenyGripping_Implementation()
+{
+	return bDenyGripping;
+}
+
+bool UVRSliderComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
+{
+	return false;
+}
+
+void UVRSliderComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
+{
+	GripStiffnessOut = 0.0f;
+	GripDampingOut = 0.0f;
+}
+
+EGripCollisionType UVRSliderComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
+{
+	return EGripCollisionType::CustomGrip;
+}
+
+float UVRSliderComponent::GripBreakDistance_Implementation()
+{
+	return BreakDistance;
+}
+
+EGripLateUpdateSettings UVRSliderComponent::GripLateUpdateSetting_Implementation()
+{
+	return EGripLateUpdateSettings::LateUpdatesAlwaysOff;
+}
+
+EGripMovementReplicationSettings UVRSliderComponent::GripMovementReplicationType_Implementation()
+{
+	return MovementReplicationSetting;
+}
+
+void UVRSliderComponent::IsHeld_Implementation(TArray<FBPGripPair> & CurHoldingControllers, bool & bCurIsHeld)
+{
+	CurHoldingControllers.Empty();
+	if (HoldingGrip.IsValid())
+	{
+		CurHoldingControllers.Add(HoldingGrip);
+		bCurIsHeld = bIsHeld;
+	}
+	else
+	{
+		bCurIsHeld = false;
+	}
+}
+
+void UVRSliderComponent::OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation)
+{
+	FTransform CurrentRelativeTransform = InitialRelativeTransform * UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
+
+	// This lets me use the correct original location over the network without changes
+	FTransform ReversedRelativeTransform = FTransform(GripInformation.RelativeTransform.ToInverseMatrixWithScale());
+	FTransform RelativeToGripTransform = ReversedRelativeTransform * this->GetComponentTransform();
+
+	InitialInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(RelativeToGripTransform.GetTranslation());
+	InitialGripLoc = InitialRelativeTransform.InverseTransformPosition(this->RelativeLocation);
+	InitialDropLocation = ReversedRelativeTransform.GetTranslation();
+	LastInputKey = -1.0f;
+	LerpedKey = 0.0f;
+	bHitEventThreshold = false;
+	LastSliderProgressState = -1.0f;
+	LastSliderProgress = CurrentSliderProgress;
+
+	bIsLerping = false;
+	MomentumAtDrop = 0.0f;
+
+	if (GripInformation.GripMovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
+	{
+		bReplicateMovement = false;
+	}
+}
+
+void UVRSliderComponent::OnGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed)
+{
+	//this->SetComponentTickEnabled(false);
+	// #TODO: Handle letting go and how lerping works, specifically with the snap points it may be an issue
+	if (SliderBehaviorWhenReleased != EVRInteractibleSliderDropBehavior::Stay)
+	{
+		bIsLerping = true;
+		this->SetComponentTickEnabled(true);
+
+		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
+			bReplicateMovement = false;
+	}
+	else
+	{
+		this->SetComponentTickEnabled(false);
+		bReplicateMovement = bOriginalReplicatesMovement;
+	}
+}
+
+void UVRSliderComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
+void UVRSliderComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
+void UVRSliderComponent::OnEndUsed_Implementation() {}
+void UVRSliderComponent::OnEndSecondaryUsed_Implementation() {}
+void UVRSliderComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
+void UVRSliderComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRSliderComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRSliderComponent::OnSecondaryUsed_Implementation() {}
+void UVRSliderComponent::OnUsed_Implementation() {}
+
+bool UVRSliderComponent::RequestsSocketing_Implementation(USceneComponent *& ParentToSocketTo, FName & OptionalSocketName, FTransform_NetQuantize & RelativeTransform) { return false; }
+
+ESecondaryGripType UVRSliderComponent::SecondaryGripType_Implementation()
+{
+	return ESecondaryGripType::SG_None;
+}
+
+void UVRSliderComponent::SetHeld_Implementation(UGripMotionControllerComponent * NewHoldingController, uint8 GripID, bool bNewIsHeld)
+{
+	if (bNewIsHeld)
+	{
+		HoldingGrip = FBPGripPair(NewHoldingController, GripID);
+		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
+		{
+			if (!bIsHeld && !bIsLerping)
+				bOriginalReplicatesMovement = bReplicateMovement;
+			bReplicateMovement = false;
+		}
+	}
+	else
+	{
+		HoldingGrip.Clear();
+		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
+		{
+			bReplicateMovement = bOriginalReplicatesMovement;
+		}
+	}
+
+	bIsHeld = bNewIsHeld;
+}
+
+bool UVRSliderComponent::SimulateOnDrop_Implementation()
+{
+	return false;
+}
+
+
+EGripInterfaceTeleportBehavior UVRSliderComponent::TeleportBehavior_Implementation()
+{
+	return EGripInterfaceTeleportBehavior::DropOnTeleport;
+}
+
+void UVRSliderComponent::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime)
 {
 	// Handle manual tracking here
 	FTransform ParentTransform = UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
@@ -192,7 +404,7 @@ void UVRSliderComponent::TickGrip_Implementation(UGripMotionControllerComponent 
 	FVector CurInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(GrippingController->GetPivotLocation());
 
 	FVector CalculatedLocation = InitialGripLoc + (CurInteractorLocation - InitialInteractorLocation);
-	
+
 	float SplineProgress = CurrentSliderProgress;
 	if (SplineComponentToFollow != nullptr)
 	{
@@ -306,111 +518,6 @@ void UVRSliderComponent::TickGrip_Implementation(UGripMotionControllerComponent 
 	}
 }
 
-void UVRSliderComponent::CheckSliderProgress()
-{
-	// Skip first check, this will skip an event throw on rounded
-	if (LastSliderProgressState < 0.0f)
-	{
-		// Skip first tick, this is our resting position
-		LastSliderProgressState = CurrentSliderProgress;
-	}
-	else if ((LastSliderProgressState != CurrentSliderProgress) || bHitEventThreshold)
-	{
-		if ((!bSliderUsesSnapPoints && (CurrentSliderProgress == 1.0f || CurrentSliderProgress == 0.0f)) ||
-			(bSliderUsesSnapPoints && FMath::IsNearlyEqual(FMath::Fmod(CurrentSliderProgress, SnapIncrement), 0.0f))
-			)
-		{
-			// I am working with exacts here because of the clamping, it should actually work with no precision issues
-			// I wanted to ABS(Last-Cur) == 1.0 but it would cause an initial miss on whatever one last was inited to. 
-
-			if (!bSliderUsesSnapPoints)
-				LastSliderProgressState = FMath::RoundToFloat(CurrentSliderProgress); // Ensure it is rounded to 0 or 1
-			else
-				LastSliderProgressState = CurrentSliderProgress;
-
-			ReceiveSliderHitPoint(LastSliderProgressState);
-			OnSliderHitPoint.Broadcast(LastSliderProgressState);
-			bHitEventThreshold = false;
-		}
-	}
-
-	if (FMath::Abs(LastSliderProgressState - CurrentSliderProgress) >= EventThrowThreshold)
-	{
-		bHitEventThreshold = true;
-	}
-}
-
-void UVRSliderComponent::OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) 
-{
-	FTransform CurrentRelativeTransform = InitialRelativeTransform * UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
-
-	// This lets me use the correct original location over the network without changes
-	FTransform ReversedRelativeTransform = FTransform(GripInformation.RelativeTransform.ToInverseMatrixWithScale());
-	FTransform RelativeToGripTransform = ReversedRelativeTransform * this->GetComponentTransform();
-
-	InitialInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(RelativeToGripTransform.GetTranslation());
-	InitialGripLoc = InitialRelativeTransform.InverseTransformPosition(this->RelativeLocation);
-	InitialDropLocation = ReversedRelativeTransform.GetTranslation();
-	LastInputKey = -1.0f;
-	LerpedKey = 0.0f;
-	bHitEventThreshold = false;
-	LastSliderProgressState = -1.0f;
-	LastSliderProgress = CurrentSliderProgress;
-
-	bIsLerping = false;
-	MomentumAtDrop = 0.0f;
-
-	if (GripInformation.GripMovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
-	{
-		bReplicateMovement = false;
-	}
-}
-
-void UVRSliderComponent::OnGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) 
-{
-	//this->SetComponentTickEnabled(false);
-	// #TODO: Handle letting go and how lerping works, specifically with the snap points it may be an issue
-	if (SliderBehaviorWhenReleased != EVRInteractibleSliderDropBehavior::Stay)
-	{
-		bIsLerping = true;
-		this->SetComponentTickEnabled(true);
-
-		if(MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
-			bReplicateMovement = false;
-	}
-	else
-	{
-		this->SetComponentTickEnabled(false);
-		bReplicateMovement = bOriginalReplicatesMovement;
-	}
-}
-
-void UVRSliderComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
-void UVRSliderComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
-void UVRSliderComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRSliderComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRSliderComponent::OnUsed_Implementation() {}
-void UVRSliderComponent::OnEndUsed_Implementation() {}
-void UVRSliderComponent::OnSecondaryUsed_Implementation() {}
-void UVRSliderComponent::OnEndSecondaryUsed_Implementation() {}
-void UVRSliderComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
-bool UVRSliderComponent::RequestsSocketing_Implementation(USceneComponent *& ParentToSocketTo, FName & OptionalSocketName, FTransform_NetQuantize & RelativeTransform) { return false; }
-
-bool UVRSliderComponent::DenyGripping_Implementation()
-{
-	return bDenyGripping;
-}
-
-EGripInterfaceTeleportBehavior UVRSliderComponent::TeleportBehavior_Implementation()
-{
-	return EGripInterfaceTeleportBehavior::DropOnTeleport;
-}
-
-bool UVRSliderComponent::SimulateOnDrop_Implementation()
-{
-	return false;
-}
-
 /*EGripCollisionType UVRSliderComponent::SlotGripType_Implementation()
 {
 	return EGripCollisionType::CustomGrip;
@@ -421,27 +528,6 @@ EGripCollisionType UVRSliderComponent::FreeGripType_Implementation()
 	return EGripCollisionType::CustomGrip;
 }*/
 
-EGripCollisionType UVRSliderComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
-{
-	return EGripCollisionType::CustomGrip;
-}
-
-ESecondaryGripType UVRSliderComponent::SecondaryGripType_Implementation()
-{
-	return ESecondaryGripType::SG_None;
-}
-
-
-EGripMovementReplicationSettings UVRSliderComponent::GripMovementReplicationType_Implementation()
-{
-	return MovementReplicationSetting;
-}
-
-EGripLateUpdateSettings UVRSliderComponent::GripLateUpdateSetting_Implementation()
-{
-	return EGripLateUpdateSettings::LateUpdatesAlwaysOff;
-}
-
 /*float UVRSliderComponent::GripStiffness_Implementation()
 {
 	return 0.0f;
@@ -451,21 +537,6 @@ float UVRSliderComponent::GripDamping_Implementation()
 {
 	return 0.0f;
 }*/
-void UVRSliderComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
-{
-	GripStiffnessOut = 0.0f;
-	GripDampingOut = 0.0f;
-}
-
-FBPAdvGripSettings UVRSliderComponent::AdvancedGripSettings_Implementation()
-{
-	return FBPAdvGripSettings(GripPriority);
-}
-
-float UVRSliderComponent::GripBreakDistance_Implementation()
-{
-	return BreakDistance;
-}
 
 /*void UVRSliderComponent::ClosestSecondarySlotInRange_Implementation(FVector WorldLocation, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
 {
@@ -477,62 +548,30 @@ void UVRSliderComponent::ClosestPrimarySlotInRange_Implementation(FVector WorldL
 	bHadSlotInRange = false;
 }*/
 
-void UVRSliderComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
-{
-	bHadSlotInRange = false;
-}
-
-bool UVRSliderComponent::AllowsMultipleGrips_Implementation()
-{
-	return false;
-}
-
-void UVRSliderComponent::IsHeld_Implementation(TArray<FBPGripPair> & CurHoldingControllers, bool & bCurIsHeld)
-{
-	CurHoldingControllers.Empty();
-	if (HoldingGrip.IsValid())
-	{
-		CurHoldingControllers.Add(HoldingGrip);
-		bCurIsHeld = bIsHeld;
-	}
-	else
-	{
-		bCurIsHeld = false;
-	}
-}
-
-void UVRSliderComponent::SetHeld_Implementation(UGripMotionControllerComponent * NewHoldingController, uint8 GripID, bool bNewIsHeld)
-{
-	if (bNewIsHeld)
-	{
-		HoldingGrip = FBPGripPair(NewHoldingController, GripID);
-		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
-		{
-			if (!bIsHeld && !bIsLerping)
-				bOriginalReplicatesMovement = bReplicateMovement;
-			bReplicateMovement = false;
-		}
-	}
-	else
-	{
-		HoldingGrip.Clear();
-		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
-		{
-			bReplicateMovement = bOriginalReplicatesMovement;
-		}
-	}
-
-	bIsHeld = bNewIsHeld;
-}
-
 /*FBPInteractionSettings UVRSliderComponent::GetInteractionSettings_Implementation()
 {
 	return FBPInteractionSettings();
 }*/
 
-bool UVRSliderComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
+float UVRSliderComponent::CalculateSliderProgress()
 {
-	return false;
+	if (this->SplineComponentToFollow != nullptr)
+	{
+		CurrentSliderProgress = GetCurrentSliderProgress(this->GetComponentLocation());
+	}
+	else
+	{
+		FTransform ParentTransform = UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
+		FTransform CurrentRelativeTransform = InitialRelativeTransform * ParentTransform;
+		FVector CalculatedLocation = CurrentRelativeTransform.InverseTransformPosition(this->GetComponentLocation());
+
+		//if (bSlideDistanceIsInParentSpace)
+			//CalculatedLocation *= FVector(1.0f) / InitialRelativeTransform.GetScale3D();
+
+		CurrentSliderProgress = GetCurrentSliderProgress(CalculatedLocation);
+	}
+
+	return CurrentSliderProgress;
 }
 
 FVector UVRSliderComponent::ClampSlideVector(FVector ValueToClamp)
@@ -601,16 +640,6 @@ void UVRSliderComponent::GetLerpedKey(float &ClosestKey, float DeltaTime)
 
 	default: break;
 	}
-}
-
-void UVRSliderComponent::SetSplineComponentToFollow(USplineComponent * SplineToFollow)
-{
-	SplineComponentToFollow = SplineToFollow;
-	
-	if (SplineToFollow != nullptr)
-		ResetToParentSplineLocation();
-	else
-		CalculateSliderProgress();
 }
 
 void UVRSliderComponent::ResetInitialSliderLocation()
@@ -684,23 +713,14 @@ void UVRSliderComponent::SetSliderProgress(float NewSliderProgress)
 	CurrentSliderProgress = NewSliderProgress;
 }
 
-float UVRSliderComponent::CalculateSliderProgress()
+void UVRSliderComponent::SetSplineComponentToFollow(USplineComponent * SplineToFollow)
 {
-	if (this->SplineComponentToFollow != nullptr)
-	{
-		CurrentSliderProgress = GetCurrentSliderProgress(this->GetComponentLocation());
-	}
+	SplineComponentToFollow = SplineToFollow;
+
+	if (SplineToFollow != nullptr)
+		ResetToParentSplineLocation();
 	else
-	{
-		FTransform ParentTransform = UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
-		FTransform CurrentRelativeTransform = InitialRelativeTransform * ParentTransform;
-		FVector CalculatedLocation = CurrentRelativeTransform.InverseTransformPosition(this->GetComponentLocation());
-
-		//if (bSlideDistanceIsInParentSpace)
-			//CalculatedLocation *= FVector(1.0f) / InitialRelativeTransform.GetScale3D();
-
-		CurrentSliderProgress = GetCurrentSliderProgress(CalculatedLocation);
-	}
-
-	return CurrentSliderProgress;
+		CalculateSliderProgress();
 }
+
+

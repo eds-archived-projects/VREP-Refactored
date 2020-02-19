@@ -32,7 +32,6 @@ UGS_GunTools::UGS_GunTools(const FObjectInitializer& ObjectInitializer) :
 	//StockSnapOffset = FVector(0.f, 0.f, 0.f);
 	bIsMounted = false;
 
-
 	bHasRecoil = false;
 	MaxRecoilTranslation = FVector::ZeroVector;
 	MaxRecoilRotation = FVector::ZeroVector;
@@ -43,16 +42,6 @@ UGS_GunTools::UGS_GunTools(const FObjectInitializer& ObjectInitializer) :
 
 	BackEndRecoilStorage = FTransform::Identity;
 
-	//StockSnapDistance = 35.f;
-	//bUseDistanceBasedStockSnapping = true;
-	//SmoothingValueForStock = 0.0f;
-	//bSmoothStockHand = false;
-
-	// Speed up the lerp on fast movements for this
-	//StockHandSmoothing.DeltaCutoff = 20.0f;
-	//StockHandSmoothing.MinCutoff = 5.0f;
-	//bDebugDrawVirtualStock = false;
-
 	bUseGlobalVirtualStockSettings = true;
 
 	bUseHighQualityRemoteSimulation = false;
@@ -61,34 +50,6 @@ UGS_GunTools::UGS_GunTools(const FObjectInitializer& ObjectInitializer) :
 // Functions
 
 //=============================================================================
-/*void UGS_GunTools::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(UGS_GunTools, bUseAdvancedSecondarySettings);
-
-	DOREPLIFETIME_CONDITION(UGS_GunTools, SecondaryGripScaler, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, bUseConstantGripScaler, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, bUseSecondaryGripDistanceInfluence, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, GripInfluenceDeadZone, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, GripInfluenceDistanceToZero, COND_Custom);
-
-	DOREPLIFETIME(UGS_GunTools, PivotOffset);
-
-	DOREPLIFETIME(UGS_GunTools, bUseVirtualStock);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, VirtualStockComponent, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, bUseDistanceBasedStockSnapping, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, StockSnapDistance, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, StockSnapOffset, COND_Custom);
-
-	DOREPLIFETIME(UGS_GunTools, bHasRecoil);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, MaxRecoilTranslation, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, MaxRecoilRotation, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, MaxRecoilScale, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, DecayRate, COND_Custom);
-	DOREPLIFETIME_CONDITION(UGS_GunTools, LerpRate, COND_Custom);
-}*/
-
 void UGS_GunTools::AddRecoilInstance(const FTransform& RecoilAddition)
 {
 	if (!bHasRecoil)
@@ -312,6 +273,7 @@ bool UGS_GunTools::GetWorldTransform_Implementation
 	// Handle the interp and multi grip situations, re-checking the grip situation here as it may have changed in the switch above.
 	if ((Grip.SecondaryGripInfo.bHasSecondaryAttachment && Grip.SecondaryGripInfo.SecondaryAttachment) || Grip.SecondaryGripInfo.GripLerpState == EGripLerpState::EndLerp)
 	{
+		FTransform NewWorldTransform = WorldTransform;
 		FTransform SecondaryTransform = Grip.RelativeTransform * ParentTransform;
 
 		// Checking secondary grip type for the scaling setting
@@ -338,10 +300,8 @@ bool UGS_GunTools::GetWorldTransform_Implementation
 			// Ending lerp out of a multi grip
 			if (Grip.SecondaryGripInfo.GripLerpState == EGripLerpState::EndLerp)
 			{
-				frontLocOrig = (/*WorldTransform*/SecondaryTransform.TransformPosition(Grip.SecondaryGripInfo.SecondaryRelativeTransform.GetLocation())) - BasePoint;
-				frontLoc = Grip.SecondaryGripInfo.LastRelativeLocation;
-
-				frontLocOrig = FMath::Lerp(frontLoc, frontLocOrig, FMath::Clamp(Grip.SecondaryGripInfo.curLerp / Grip.SecondaryGripInfo.LerpToRate, 0.0f, 1.0f));
+				  WorldTransform.Blend(WorldTransform, RelativeTransOnSecondaryRelease* GrippingController->GetPivotTransform(), FMath::Clamp(Grip.SecondaryGripInfo.curLerp / Grip.SecondaryGripInfo.LerpToRate, 0.0f, 1.0f));
+          return true;
 			}
 			else // Is in a multi grip, might be lerping into it as well.
 			{
@@ -411,12 +371,12 @@ bool UGS_GunTools::GetWorldTransform_Implementation
 						// Quaternion interpolation
 						NA.Blend(NB, NA, VirtualStockSettings.StockLerpValue);
 
-						WorldTransform = WorldTransform * WorldToPivot * NA * PivotToWorld;
+						NewWorldTransform = WorldTransform * WorldToPivot * NA * PivotToWorld;
 					}
 					else
 					{
 						// Rebase the world transform to the pivot point, add the rotation, remove the pivot point rebase
-						WorldTransform = WorldTransform * WorldToPivot * MountAdditionRotation * FTransform(rotVal, FVector::ZeroVector, Scaler) * PivotToWorld;
+						NewWorldTransform = WorldTransform * WorldToPivot * MountAdditionRotation * FTransform(rotVal, FVector::ZeroVector, Scaler) * PivotToWorld;
 					}
 				}
 				else
@@ -425,7 +385,7 @@ bool UGS_GunTools::GetWorldTransform_Implementation
 					FQuat rotVal = FQuat::FindBetweenVectors(frontLocOrig, frontLoc);
 
 					// Rebase the world transform to the pivot point, add the rotation, remove the pivot point rebase
-					WorldTransform = WorldTransform * WorldToPivot * FTransform(rotVal, FVector::ZeroVector, Scaler) * PivotToWorld;
+					NewWorldTransform = WorldTransform * WorldToPivot * FTransform(rotVal, FVector::ZeroVector, Scaler) * PivotToWorld;
 				}
 			}
 			else
@@ -446,22 +406,37 @@ bool UGS_GunTools::GetWorldTransform_Implementation
 
 						// Quaternion interpolation
 						NA.Blend(NB, NA, VirtualStockSettings.StockLerpValue);
-						WorldTransform = WorldTransform * WorldToPivot * NA * PivotToWorld;
+						NewWorldTransform = WorldTransform * WorldToPivot * NA * PivotToWorld;
 					}
 					else
 					{
 						// Rebase the world transform to the pivot point, add the scaler, remove the pivot point rebase
-						WorldTransform = WorldTransform * WorldToPivot * MountAdditionRotation * FTransform(FQuat::Identity, FVector::ZeroVector, Scaler) * PivotToWorld;
+						NewWorldTransform = WorldTransform * WorldToPivot * MountAdditionRotation * FTransform(FQuat::Identity, FVector::ZeroVector, Scaler) * PivotToWorld;
 					}
 				}
 				else
 				{
 					// Rebase the world transform to the pivot point, add the scaler, remove the pivot point rebase
-					WorldTransform = WorldTransform * WorldToPivot * FTransform(FQuat::Identity, FVector::ZeroVector, Scaler) * PivotToWorld;
+					NewWorldTransform = WorldTransform * WorldToPivot * FTransform(FQuat::Identity, FVector::ZeroVector, Scaler) * PivotToWorld;
 				}
 			}
 		}
+
+		if (Grip.SecondaryGripInfo.GripLerpState == EGripLerpState::StartLerp)
+		{
+			WorldTransform.Blend(NewWorldTransform, WorldTransform, FMath::Clamp(Grip.SecondaryGripInfo.curLerp / Grip.SecondaryGripInfo.LerpToRate, 0.0f, 1.0f));
+		}
+		else
+		{
+			WorldTransform = NewWorldTransform;
+		}
+
+		if (Grip.SecondaryGripInfo.bHasSecondaryAttachment)
+		{
+			RelativeTransOnSecondaryRelease = WorldTransform.GetRelativeTransform(GrippingController->GetPivotTransform());
+		}
 	}
+
 	return true;
 }
 

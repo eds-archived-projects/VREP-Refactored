@@ -1,7 +1,16 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Interactibles/VRMountComponent.h"
+
+// Unreal
 #include "Net/UnrealNetwork.h"
+
+// UVRMountComponent
+
+// Public
+
+// Constructor & Destructor
 
 //=============================================================================
 UVRMountComponent::UVRMountComponent(const FObjectInitializer& ObjectInitializer)
@@ -45,6 +54,18 @@ UVRMountComponent::~UVRMountComponent()
 {
 }
 
+// Actor Overloads
+
+void UVRMountComponent::BeginPlay()
+{
+	// Call the base class 
+	Super::BeginPlay();
+}
+
+bool UVRMountComponent::DenyGripping_Implementation()
+{
+	return bDenyGripping;
+}
 
 void UVRMountComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
 {
@@ -73,10 +94,9 @@ void UVRMountComponent::OnRegister()
 	ResetInitialMountLocation(); // Load the original mount location
 }
 
-void UVRMountComponent::BeginPlay()
+void UVRMountComponent::OnUnregister()
 {
-	// Call the base class 
-	Super::BeginPlay();
+	Super::OnUnregister();
 }
 
 void UVRMountComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
@@ -86,9 +106,179 @@ void UVRMountComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
 
 }
 
-void UVRMountComponent::OnUnregister()
+// IVRGripInterface Implementation
+
+FBPAdvGripSettings UVRMountComponent::AdvancedGripSettings_Implementation()
 {
-	Super::OnUnregister();
+	return FBPAdvGripSettings(GripPriority);
+}
+
+bool UVRMountComponent::AllowsMultipleGrips_Implementation()
+{
+	return false;
+}
+
+void UVRMountComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
+{
+	bHadSlotInRange = false;
+}
+
+bool UVRMountComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
+{
+	return false;
+}
+
+void UVRMountComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
+{
+	GripStiffnessOut = Stiffness;
+	GripDampingOut = Damping;
+}
+
+EGripCollisionType UVRMountComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
+{
+	return EGripCollisionType::CustomGrip;
+}
+
+float UVRMountComponent::GripBreakDistance_Implementation()
+{
+	return BreakDistance;
+}
+
+EGripLateUpdateSettings UVRMountComponent::GripLateUpdateSetting_Implementation()
+{
+	return EGripLateUpdateSettings::LateUpdatesAlwaysOff;
+}
+
+EGripMovementReplicationSettings UVRMountComponent::GripMovementReplicationType_Implementation()
+{
+	return MovementReplicationSetting;
+}
+
+void UVRMountComponent::IsHeld_Implementation(TArray<FBPGripPair> & CurHoldingControllers, bool & bCurIsHeld)
+{
+	CurHoldingControllers.Empty();
+	if (HoldingGrip.IsValid())
+	{
+		CurHoldingControllers.Add(HoldingGrip);
+		bCurIsHeld = bIsHeld;
+	}
+	else
+	{
+		bCurIsHeld = false;
+	}
+}
+
+void UVRMountComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
+void UVRMountComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
+
+void UVRMountComponent::OnEndUsed_Implementation() {}
+void UVRMountComponent::OnEndSecondaryUsed_Implementation() {}
+
+void UVRMountComponent::OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation)
+{	
+	FTransform CurrentRelativeTransform = InitialRelativeTransform * UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
+
+	// This lets me use the correct original location over the network without changes
+	FTransform ReversedRelativeTransform = FTransform(GripInformation.RelativeTransform.ToInverseMatrixWithScale());
+	FTransform RelativeToGripTransform = ReversedRelativeTransform * this->GetComponentTransform();
+
+	//continue here CurToForwardAxis is based on last gripped location ---> change this
+	InitialInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(RelativeToGripTransform.GetTranslation());
+	InitialInteractorDropLocation = ReversedRelativeTransform.GetTranslation();
+
+	switch (MountRotationAxis)
+	{
+	case EVRInteractibleMountAxis::Axis_XZ:
+	{
+		//spaceharry
+
+		qRotAtGrab = this->GetComponentTransform().GetRelativeTransform(CurrentRelativeTransform).GetRotation();
+
+		FVector ForwardVectorToUse = GetForwardVector();
+
+		if (USceneComponent * ParentComp = GetAttachParent())
+		{
+			ForwardVectorToUse = ParentComp->GetComponentRotation().UnrotateVector(ForwardVectorToUse);
+		}
+
+		InitialForwardVector = InitialInteractorLocation.Size() * ForwardVectorToUse;
+
+		if (FVector::DotProduct(InitialInteractorLocation, ForwardVectorToUse) <= 0)
+		{
+			GrippedOnBack = true;
+			InitialGripToForwardVec = (InitialForwardVector + InitialInteractorLocation);
+		}
+		else
+		{
+			InitialGripToForwardVec = InitialForwardVector - InitialInteractorLocation;
+			GrippedOnBack = false;
+		}
+
+
+		InitialGripToForwardVec = FRotator(RelativeRotation.Pitch, RelativeRotation.Yaw, TwistDiff).UnrotateVector(InitialGripToForwardVec);
+
+	}break;
+	default:break;
+	}
+
+		
+
+
+	this->SetComponentTickEnabled(true);
+}
+void UVRMountComponent::OnGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed)
+{
+		this->SetComponentTickEnabled(false);
+}
+
+void UVRMountComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
+
+void UVRMountComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRMountComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+
+void UVRMountComponent::OnSecondaryUsed_Implementation() {}
+
+void UVRMountComponent::OnUsed_Implementation() {}
+
+bool UVRMountComponent::RequestsSocketing_Implementation(USceneComponent *& ParentToSocketTo, FName & OptionalSocketName, FTransform_NetQuantize & RelativeTransform) { return false; }
+
+ESecondaryGripType UVRMountComponent::SecondaryGripType_Implementation()
+{
+	return ESecondaryGripType::SG_None;
+}
+
+void UVRMountComponent::SetHeld_Implementation(UGripMotionControllerComponent * NewHoldingController, uint8 GripID, bool bNewIsHeld)
+{
+	if (bNewIsHeld)
+	{
+		HoldingGrip = FBPGripPair(NewHoldingController, GripID);
+		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
+		{
+			if (!bIsHeld)
+				bOriginalReplicatesMovement = bReplicateMovement;
+			bReplicateMovement = false;
+		}
+	}
+	else
+	{
+		HoldingGrip.Clear();
+		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
+		{
+			bReplicateMovement = bOriginalReplicatesMovement;
+		}
+	}
+
+	bIsHeld = bNewIsHeld;
+}
+
+bool UVRMountComponent::SimulateOnDrop_Implementation()
+{
+	return false;
+}
+
+EGripInterfaceTeleportBehavior UVRMountComponent::TeleportBehavior_Implementation()
+{
+	return EGripInterfaceTeleportBehavior::DropOnTeleport;
 }
 
 void UVRMountComponent::TickGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation, float DeltaTime)
@@ -108,7 +298,7 @@ void UVRMountComponent::TickGrip_Implementation(UGripMotionControllerComponent *
 		//In case the Mount is initially gripped on the back (negative of relative x axis)
 		if (GrippedOnBack)
 		{
-			CurInteractorLocation = CurInteractorLocation *-1;
+			CurInteractorLocation = CurInteractorLocation * -1;
 		}
 
 		//Rotate the Initial Grip relative to the Forward Axis so it represents the current correct vector after Mount is rotated. 
@@ -264,8 +454,8 @@ void UVRMountComponent::TickGrip_Implementation(UGripMotionControllerComponent *
 					//If Mount Rotation is still inside FrontFlipZone ajust the roll so it looks naturally when moving the Mount against the FlipPlane
 
 					FVector RelativeUpVec = GetUpVector();
-					
-					if(USceneComponent * ParentComp = GetAttachParent())
+
+					if (USceneComponent * ParentComp = GetAttachParent())
 						RelativeUpVec = ParentComp->GetComponentRotation().UnrotateVector(RelativeUpVec);
 
 					FVector CurrentUpVec = FVector(RelativeUpVec.X, RelativeUpVec.Y, 0).GetSafeNormal();
@@ -358,112 +548,6 @@ void UVRMountComponent::TickGrip_Implementation(UGripMotionControllerComponent *
 	}
 }
 
-void UVRMountComponent::OnGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation)
-{	
-	FTransform CurrentRelativeTransform = InitialRelativeTransform * UVRInteractibleFunctionLibrary::Interactible_GetCurrentParentTransform(this);
-
-	// This lets me use the correct original location over the network without changes
-	FTransform ReversedRelativeTransform = FTransform(GripInformation.RelativeTransform.ToInverseMatrixWithScale());
-	FTransform RelativeToGripTransform = ReversedRelativeTransform * this->GetComponentTransform();
-
-	//continue here CurToForwardAxis is based on last gripped location ---> change this
-	InitialInteractorLocation = CurrentRelativeTransform.InverseTransformPosition(RelativeToGripTransform.GetTranslation());
-	InitialInteractorDropLocation = ReversedRelativeTransform.GetTranslation();
-
-	switch (MountRotationAxis)
-	{
-	case EVRInteractibleMountAxis::Axis_XZ:
-	{
-		//spaceharry
-
-		qRotAtGrab = this->GetComponentTransform().GetRelativeTransform(CurrentRelativeTransform).GetRotation();
-
-		FVector ForwardVectorToUse = GetForwardVector();
-
-		if (USceneComponent * ParentComp = GetAttachParent())
-		{
-			ForwardVectorToUse = ParentComp->GetComponentRotation().UnrotateVector(ForwardVectorToUse);
-		}
-
-		InitialForwardVector = InitialInteractorLocation.Size() * ForwardVectorToUse;
-
-		if (FVector::DotProduct(InitialInteractorLocation, ForwardVectorToUse) <= 0)
-		{
-			GrippedOnBack = true;
-			InitialGripToForwardVec = (InitialForwardVector + InitialInteractorLocation);
-		}
-		else
-		{
-			InitialGripToForwardVec = InitialForwardVector - InitialInteractorLocation;
-			GrippedOnBack = false;
-		}
-
-
-		InitialGripToForwardVec = FRotator(RelativeRotation.Pitch, RelativeRotation.Yaw, TwistDiff).UnrotateVector(InitialGripToForwardVec);
-
-	}break;
-	default:break;
-	}
-
-		
-
-
-	this->SetComponentTickEnabled(true);
-}
-
-void UVRMountComponent::OnGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed)
-{
-		this->SetComponentTickEnabled(false);
-}
-
-void UVRMountComponent::OnChildGrip_Implementation(UGripMotionControllerComponent * GrippingController, const FBPActorGripInformation & GripInformation) {}
-void UVRMountComponent::OnChildGripRelease_Implementation(UGripMotionControllerComponent * ReleasingController, const FBPActorGripInformation & GripInformation, bool bWasSocketed) {}
-void UVRMountComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRMountComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRMountComponent::OnUsed_Implementation() {}
-void UVRMountComponent::OnEndUsed_Implementation() {}
-void UVRMountComponent::OnSecondaryUsed_Implementation() {}
-void UVRMountComponent::OnEndSecondaryUsed_Implementation() {}
-void UVRMountComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
-bool UVRMountComponent::RequestsSocketing_Implementation(USceneComponent *& ParentToSocketTo, FName & OptionalSocketName, FTransform_NetQuantize & RelativeTransform) { return false; }
-
-bool UVRMountComponent::DenyGripping_Implementation()
-{
-	return bDenyGripping;
-}
-
-EGripInterfaceTeleportBehavior UVRMountComponent::TeleportBehavior_Implementation()
-{
-	return EGripInterfaceTeleportBehavior::DropOnTeleport;
-}
-
-bool UVRMountComponent::SimulateOnDrop_Implementation()
-{
-	return false;
-}
-
-
-EGripCollisionType UVRMountComponent::GetPrimaryGripType_Implementation(bool bIsSlot)
-{
-		return EGripCollisionType::CustomGrip;
-}
-
-ESecondaryGripType UVRMountComponent::SecondaryGripType_Implementation()
-{
-	return ESecondaryGripType::SG_None;
-}
-
-
-EGripMovementReplicationSettings UVRMountComponent::GripMovementReplicationType_Implementation()
-{
-	return MovementReplicationSetting;
-}
-
-EGripLateUpdateSettings UVRMountComponent::GripLateUpdateSetting_Implementation()
-{
-	return EGripLateUpdateSettings::LateUpdatesAlwaysOff;
-}
-
 /*float UVRMountComponent::GripStiffness_Implementation()
 {
 return Stiffness;
@@ -473,21 +557,6 @@ float UVRMountComponent::GripDamping_Implementation()
 {
 return Damping;
 }*/
-void UVRMountComponent::GetGripStiffnessAndDamping_Implementation(float &GripStiffnessOut, float &GripDampingOut)
-{
-	GripStiffnessOut = Stiffness;
-	GripDampingOut = Damping;
-}
-
-FBPAdvGripSettings UVRMountComponent::AdvancedGripSettings_Implementation()
-{
-	return FBPAdvGripSettings(GripPriority);
-}
-
-float UVRMountComponent::GripBreakDistance_Implementation()
-{
-	return BreakDistance;
-}
 
 /*void UVRMountComponent::ClosestSecondarySlotInRange_Implementation(FVector WorldLocation, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
 {
@@ -499,61 +568,7 @@ void UVRMountComponent::ClosestPrimarySlotInRange_Implementation(FVector WorldLo
 bHadSlotInRange = false;
 }*/
 
-void UVRMountComponent::ClosestGripSlotInRange_Implementation(FVector WorldLocation, bool bSecondarySlot, bool & bHadSlotInRange, FTransform & SlotWorldTransform, UGripMotionControllerComponent * CallingController, FName OverridePrefix)
-{
-	bHadSlotInRange = false;
-}
-
-bool UVRMountComponent::AllowsMultipleGrips_Implementation()
-{
-	return false;
-}
-
-void UVRMountComponent::IsHeld_Implementation(TArray<FBPGripPair> & CurHoldingControllers, bool & bCurIsHeld)
-{
-	CurHoldingControllers.Empty();
-	if (HoldingGrip.IsValid())
-	{
-		CurHoldingControllers.Add(HoldingGrip);
-		bCurIsHeld = bIsHeld;
-	}
-	else
-	{
-		bCurIsHeld = false;
-	}
-}
-
-void UVRMountComponent::SetHeld_Implementation(UGripMotionControllerComponent * NewHoldingController, uint8 GripID, bool bNewIsHeld)
-{
-	if (bNewIsHeld)
-	{
-		HoldingGrip = FBPGripPair(NewHoldingController, GripID);
-		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
-		{
-			if (!bIsHeld)
-				bOriginalReplicatesMovement = bReplicateMovement;
-			bReplicateMovement = false;
-		}
-	}
-	else
-	{
-		HoldingGrip.Clear();
-		if (MovementReplicationSetting != EGripMovementReplicationSettings::ForceServerSideMovement)
-		{
-			bReplicateMovement = bOriginalReplicatesMovement;
-		}
-	}
-
-	bIsHeld = bNewIsHeld;
-}
-
 /*FBPInteractionSettings UVRMountComponent::GetInteractionSettings_Implementation()
 {
 	return FBPInteractionSettings();
 }*/
-
-
-bool UVRMountComponent::GetGripScripts_Implementation(TArray<UVRGripScriptBase*> & ArrayReference)
-{
-	return false;
-}

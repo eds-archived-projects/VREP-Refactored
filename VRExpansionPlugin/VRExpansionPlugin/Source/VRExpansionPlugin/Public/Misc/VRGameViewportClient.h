@@ -2,11 +2,23 @@
 // and a VR player. It is not needed outside of that use.
 
 #pragma once
-#include "Engine/GameViewportClient.h"
-#include "Engine/Engine.h"
-#include "CoreMinimal.h"
 
+// Includes
+
+
+// Unreal
+#include "CoreMinimal.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+
+
+// VREP
+
+
+
+// UHeader Tool
 #include "VRGameViewportClient.generated.h"
+
 
 UENUM(Blueprintable)
 enum class EVRGameInputMethod : uint8
@@ -28,9 +40,35 @@ class VREXPANSIONPLUGIN_API UVRGameViewportClient : public UGameViewportClient
 
 public:
 
-	// Input Method for the viewport
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRExpansionPlugin")
-		EVRGameInputMethod GameInputMethod;
+	// Functions
+
+	virtual bool InputAxis(FViewport* tViewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override
+	{
+
+		const int32 NumLocalPlayers = World->GetGameInstance()->GetNumLocalPlayers();
+
+		// Early out if a gamepad or not a mouse event (vr controller) or ignoring input or is default setup / no GEngine
+		if (!Key.IsMouseButton() || NumLocalPlayers < 2 || GameInputMethod == EVRGameInputMethod::GameInput_Default || IgnoreInput() || bGamepad)
+			return Super::InputAxis(tViewport, ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
+
+		if (GameInputMethod == EVRGameInputMethod::GameInput_KeyboardAndMouseToPlayer2)
+		{
+			// keyboard / mouse always go to player 0, so + 1 will be player 2
+			++ControllerId;
+			return Super::InputAxis(tViewport, ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
+		}
+		else // Shared keyboard and mouse
+		{
+			bool bRetVal = false;
+			for (int32 i = 0; i < NumLocalPlayers; i++)
+			{
+				bRetVal = Super::InputAxis(tViewport, i, Key, Delta, DeltaTime, NumSamples, bGamepad) || bRetVal;
+			}
+
+			return bRetVal;
+		}
+
+	}
 
 	virtual bool InputKey(const FInputKeyEventArgs& EventArgs) override
 	{
@@ -66,33 +104,10 @@ public:
 		}
 	}
 
-	virtual bool InputAxis(FViewport* tViewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override
-	{		
-		
-		const int32 NumLocalPlayers = World->GetGameInstance()->GetNumLocalPlayers();
+	// Declares
 
-		// Early out if a gamepad or not a mouse event (vr controller) or ignoring input or is default setup / no GEngine
-		if (!Key.IsMouseButton() || NumLocalPlayers < 2 || GameInputMethod == EVRGameInputMethod::GameInput_Default || IgnoreInput() || bGamepad)
-			return Super::InputAxis(tViewport, ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-
-		if (GameInputMethod == EVRGameInputMethod::GameInput_KeyboardAndMouseToPlayer2)
-		{
-			// keyboard / mouse always go to player 0, so + 1 will be player 2
-			++ControllerId;
-			return Super::InputAxis(tViewport, ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-		}
-		else // Shared keyboard and mouse
-		{
-			bool bRetVal = false;
-			for (int32 i = 0; i < NumLocalPlayers; i++)
-			{
-				bRetVal = Super::InputAxis(tViewport, i, Key, Delta, DeltaTime, NumSamples, bGamepad) || bRetVal;
-			}
-
-			return bRetVal;
-		}
-
-	}
-
+	// Input Method for the viewport
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRExpansionPlugin")
+		EVRGameInputMethod GameInputMethod;
 
 };

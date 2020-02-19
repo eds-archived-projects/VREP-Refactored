@@ -1,9 +1,21 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Interactibles/VRButtonComponent.h"
+
+// Unreal
 #include "GameFramework/Character.h"
 
-  //=============================================================================
+// VREP
+
+
+// UVRButtonComponent
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 UVRButtonComponent::UVRButtonComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -22,6 +34,9 @@ UVRButtonComponent::UVRButtonComponent(const FObjectInitializer& ObjectInitializ
 	MinTimeBetweenEngaging = 0.1f;
 
 	bIsEnabled = true;
+	StateChangeAuthorityType = EVRStateChangeAuthorityType::CanChangeState_All;
+	bButtonState = false;
+
 
 	this->SetCollisionResponseToAllChannels(ECR_Overlap);
 
@@ -36,32 +51,7 @@ UVRButtonComponent::~UVRButtonComponent()
 {
 }
 
-void UVRButtonComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(UVRButtonComponent, InitialRelativeTransform);
-	DOREPLIFETIME(UVRButtonComponent, bReplicateMovement);
-	DOREPLIFETIME_CONDITION(UVRButtonComponent, bButtonState, COND_InitialOnly);
-}
-
-void UVRButtonComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
-{
-	Super::PreReplication(ChangedPropertyTracker);
-
-	// Replicate the levers initial transform if we are replicating movement
-	//DOREPLIFETIME_ACTIVE_OVERRIDE(UVRButtonComponent, InitialRelativeTransform, bReplicateMovement);
-
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
-	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
-}
-
-void UVRButtonComponent::OnRegister()
-{
-	Super::OnRegister();
-	ResetInitialButtonLocation();
-}
+// Functions
 
 void UVRButtonComponent::BeginPlay()
 {
@@ -74,85 +64,33 @@ void UVRButtonComponent::BeginPlay()
 	OnComponentEndOverlap.AddUniqueDynamic(this, &UVRButtonComponent::OnOverlapEnd);
 }
 
-void UVRButtonComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
+void UVRButtonComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
 {
-	// Call supers tick (though I don't think any of the base classes to this actually implement it)
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	const float WorldTime = GetWorld()->GetTimeSeconds();
+	DOREPLIFETIME(UVRButtonComponent, InitialRelativeTransform);
+	DOREPLIFETIME(UVRButtonComponent, bReplicateMovement);
+	DOREPLIFETIME(UVRButtonComponent, StateChangeAuthorityType);
+	DOREPLIFETIME_CONDITION(UVRButtonComponent, bButtonState, COND_InitialOnly);
+}
 
-	if (LocalInteractingComponent.IsValid())
+FVector UVRButtonComponent::GetTargetRelativeLocation()
+{
+	// If target is the half pressed
+	if (ButtonType == EVRButtonType::Btn_Toggle_Stay && bButtonState)
 	{
-		// If button was set to inactive during use
-		if (!bIsEnabled)
-		{
-			// Remove interacting component and return, next tick will begin lerping back
-			LocalInteractingComponent.Reset();
-			return;
-		}
-
-		FTransform OriginalBaseTransform = CalcNewComponentToWorld(InitialRelativeTransform);
-
-		float CheckDepth = FMath::Clamp(GetAxisValue(InitialLocation) - GetAxisValue(OriginalBaseTransform.InverseTransformPosition(LocalInteractingComponent->GetComponentLocation())), 0.0f, DepressDistance);
-
-		if (CheckDepth > 0.0f)
-		{
-
-			float ClampMinDepth = 0.0f;
-			
-			// If active and a toggled stay, then clamp min to the toggled stay location
-			if (ButtonType == EVRButtonType::Btn_Toggle_Stay && bButtonState)
-				ClampMinDepth = -(ButtonEngageDepth + (1.e-2f)); // + NOT_SO_KINDA_SMALL_NUMBER
-
-			float NewDepth = FMath::Clamp(GetAxisValue(InitialComponentLoc) + (-CheckDepth), -DepressDistance, ClampMinDepth);
-			this->SetRelativeLocation(InitialRelativeTransform.TransformPosition(SetAxisValue(NewDepth)), false);
-
-			if (ButtonType == EVRButtonType::Btn_Toggle_Return || ButtonType == EVRButtonType::Btn_Toggle_Stay)
-			{
-				if (!bToggledThisTouch && NewDepth <= (-ButtonEngageDepth) + KINDA_SMALL_NUMBER && (WorldTime - LastToggleTime) >= MinTimeBetweenEngaging)
-				{
-					LastToggleTime = WorldTime;
-					bToggledThisTouch = true;
-					bButtonState = !bButtonState;
-					ReceiveButtonStateChanged(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-					OnButtonStateChanged.Broadcast(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-				}
-			}
-		}
-	}
-	else
-	{
-		// Std precision tolerance should be fine
-		if (this->RelativeLocation.Equals(GetTargetRelativeLocation()))
-		{
-			this->SetComponentTickEnabled(false);
-
-			OnButtonEndInteraction.Broadcast(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-			ReceiveButtonEndInteraction(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-
-			LocalInteractingComponent.Reset(); // Just reset it here so it only does it once
-			LocalLastInteractingComponent.Reset();
-		}
-		else
-			this->SetRelativeLocation(FMath::VInterpConstantTo(this->RelativeLocation, GetTargetRelativeLocation(), DeltaTime, DepressSpeed), false);
+		// 1.e-2f = MORE_KINDA_SMALL_NUMBER
+		return InitialRelativeTransform.TransformPosition(SetAxisValue(-(ButtonEngageDepth + (1.e-2f))));
 	}
 
+	// Else return going all the way back
+	return InitialRelativeTransform.GetTranslation();
 
-	// Press buttons always get checked, both during press AND during lerping for if they are active or not.
-	if (ButtonType == EVRButtonType::Btn_Press)
-	{
-		// Check for if we should set the state of the button, done here as for the press button the lerp counts for input
-		bool bCheckState = (GetAxisValue(InitialRelativeTransform.InverseTransformPosition(this->RelativeLocation)) <= (-ButtonEngageDepth) + KINDA_SMALL_NUMBER);
-		if (bButtonState != bCheckState && (WorldTime - LastToggleTime) >= MinTimeBetweenEngaging)
+}
 
-		{
-			LastToggleTime = WorldTime;
-			bButtonState = bCheckState;
-			ReceiveButtonStateChanged(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-			OnButtonStateChanged.Broadcast(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-		}
-	}
-
+bool UVRButtonComponent::IsButtonInUse()
+{
+	return LocalInteractingComponent.IsValid();
 }
 
 bool UVRButtonComponent::IsValidOverlap_Implementation(UPrimitiveComponent * OverlapComponent)
@@ -183,7 +121,7 @@ bool UVRButtonComponent::IsValidOverlap_Implementation(UPrimitiveComponent * Ove
 		if (bIsHeld)
 			return true;
 	}
-	else if(OverlapOwner && OverlapOwner->GetClass()->ImplementsInterface(UVRGripInterface::StaticClass()))
+	else if (OverlapOwner && OverlapOwner->GetClass()->ImplementsInterface(UVRGripInterface::StaticClass()))
 	{
 		TArray<FBPGripPair> Controllers;
 		bool bIsHeld;
@@ -194,6 +132,109 @@ bool UVRButtonComponent::IsValidOverlap_Implementation(UPrimitiveComponent * Ove
 	}
 
 	return false;
+}
+
+void UVRButtonComponent::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	// Other Actor is the actor that triggered the event. Check that is not ourself.  
+	if (bIsEnabled && !LocalInteractingComponent.IsValid() && (bSkipOverlapFiltering || IsValidOverlap(OtherComp)))
+	{
+		LocalInteractingComponent = OtherComp;
+
+		FTransform OriginalBaseTransform = CalcNewComponentToWorld(InitialRelativeTransform);
+		FVector loc = LocalInteractingComponent->GetComponentLocation();
+		InitialLocation = OriginalBaseTransform.InverseTransformPosition(LocalInteractingComponent->GetComponentLocation());
+		InitialComponentLoc = OriginalBaseTransform.InverseTransformPosition(this->GetComponentLocation());
+		bToggledThisTouch = false;
+
+		this->SetComponentTickEnabled(true);
+
+		if (LocalInteractingComponent != LocalLastInteractingComponent.Get())
+		{
+			SetLastInteractingActor();
+			OnButtonBeginInteraction.Broadcast(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+			ReceiveButtonBeginInteraction(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+		}
+	}
+}
+
+void UVRButtonComponent::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (LocalInteractingComponent.IsValid() && OtherComp == LocalInteractingComponent)
+	{
+		LocalInteractingComponent.Reset();
+	}
+}
+
+void UVRButtonComponent::OnRegister()
+{
+	Super::OnRegister();
+	ResetInitialButtonLocation();
+}
+
+void UVRButtonComponent::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
+{
+	Super::PreReplication(ChangedPropertyTracker);
+
+	// Replicate the levers initial transform if we are replicating movement
+	//DOREPLIFETIME_ACTIVE_OVERRIDE(UVRButtonComponent, InitialRelativeTransform, bReplicateMovement);
+
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeLocation, bReplicateMovement);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeRotation, bReplicateMovement);
+	DOREPLIFETIME_ACTIVE_OVERRIDE(USceneComponent, RelativeScale3D, bReplicateMovement);
+}
+
+void UVRButtonComponent::ResetInitialButtonLocation()
+{
+	// Get our initial relative transform to our parent (or not if un-parented).
+	InitialRelativeTransform = this->GetRelativeTransform();
+}
+
+void UVRButtonComponent::SetButtonState(bool bNewButtonState, bool bCallButtonChangedEvent, bool bSnapIntoPosition)
+{
+	// No change
+	if (bButtonState == bNewButtonState)
+		return;
+
+	bButtonState = bNewButtonState;
+	SetButtonToRestingPosition(!bSnapIntoPosition);
+	LastToggleTime = GetWorld()->GetTimeSeconds();
+
+	if (bCallButtonChangedEvent)
+	{
+		ReceiveButtonStateChanged(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+		OnButtonStateChanged.Broadcast(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+	}
+}
+
+void UVRButtonComponent::SetButtonToRestingPosition(bool bLerpToPosition)
+{
+	switch (ButtonType)
+	{
+	case EVRButtonType::Btn_Press:
+	{
+	}break;
+	case EVRButtonType::Btn_Toggle_Return:
+	{}break;
+	case EVRButtonType::Btn_Toggle_Stay:
+	{
+		if (!bLerpToPosition)
+		{
+			float ClampMinDepth = 0.0f;
+
+			// If active and a toggled stay, then clamp min to the toggled stay location
+			if (bButtonState)
+				ClampMinDepth = -(ButtonEngageDepth + (1.e-2f)); // + NOT_SO_KINDA_SMALL_NUMBER
+
+			float NewDepth = FMath::Clamp(ClampMinDepth, -DepressDistance, ClampMinDepth);
+			this->SetRelativeLocation(InitialRelativeTransform.TransformPosition(SetAxisValue(NewDepth)), false);
+		}
+		else
+			this->SetComponentTickEnabled(true); // This will trigger the lerp to resting position
+
+	}break;
+	default:break;
+	}
 }
 
 void UVRButtonComponent::SetLastInteractingActor()
@@ -262,106 +303,95 @@ void UVRButtonComponent::SetLastInteractingActor()
 	return;
 }
 
-void UVRButtonComponent::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void UVRButtonComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
-	// Other Actor is the actor that triggered the event. Check that is not ourself.  
-	if (bIsEnabled && !LocalInteractingComponent.IsValid() && (bSkipOverlapFiltering || IsValidOverlap(OtherComp)))
+	// Call supers tick (though I don't think any of the base classes to this actually implement it)
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	const float WorldTime = GetWorld()->GetTimeSeconds();
+
+	if (LocalInteractingComponent.IsValid())
 	{
-		LocalInteractingComponent = OtherComp;
+		// If button was set to inactive during use
+		if (!bIsEnabled)
+		{
+			// Remove interacting component and return, next tick will begin lerping back
+			LocalInteractingComponent.Reset();
+			return;
+		}
 
 		FTransform OriginalBaseTransform = CalcNewComponentToWorld(InitialRelativeTransform);
-		FVector loc = LocalInteractingComponent->GetComponentLocation();
-		InitialLocation = OriginalBaseTransform.InverseTransformPosition(LocalInteractingComponent->GetComponentLocation());
-		InitialComponentLoc = OriginalBaseTransform.InverseTransformPosition(this->GetComponentLocation());
-		bToggledThisTouch = false;
 
-		this->SetComponentTickEnabled(true);
+		float CheckDepth = FMath::Clamp(GetAxisValue(InitialLocation) - GetAxisValue(OriginalBaseTransform.InverseTransformPosition(LocalInteractingComponent->GetComponentLocation())), 0.0f, DepressDistance);
 
-		if (LocalInteractingComponent != LocalLastInteractingComponent.Get())
+		if (CheckDepth > 0.0f)
 		{
-			SetLastInteractingActor();
-			OnButtonBeginInteraction.Broadcast(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-			ReceiveButtonBeginInteraction(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-		}
-	}
-}
 
-void UVRButtonComponent::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
-{
-	if (LocalInteractingComponent.IsValid() && OtherComp == LocalInteractingComponent)
-	{
-		LocalInteractingComponent.Reset();
-	}
-}
-
-FVector UVRButtonComponent::GetTargetRelativeLocation()
-{
-	// If target is the half pressed
-	if (ButtonType == EVRButtonType::Btn_Toggle_Stay && bButtonState)
-	{
-		// 1.e-2f = MORE_KINDA_SMALL_NUMBER
-		return InitialRelativeTransform.TransformPosition(SetAxisValue(-(ButtonEngageDepth + (1.e-2f))));
-	}
-
-	// Else return going all the way back
-	return InitialRelativeTransform.GetTranslation();
-
-}
-
-void UVRButtonComponent::SetButtonToRestingPosition(bool bLerpToPosition)
-{
-	switch (ButtonType)
-	{
-	case EVRButtonType::Btn_Press:
-	{
-	}break;
-	case EVRButtonType::Btn_Toggle_Return:
-	{}break;
-	case EVRButtonType::Btn_Toggle_Stay:
-	{
-		if (!bLerpToPosition)
-		{
 			float ClampMinDepth = 0.0f;
 
 			// If active and a toggled stay, then clamp min to the toggled stay location
-			if (bButtonState)
+			if (ButtonType == EVRButtonType::Btn_Toggle_Stay && bButtonState)
 				ClampMinDepth = -(ButtonEngageDepth + (1.e-2f)); // + NOT_SO_KINDA_SMALL_NUMBER
 
-			float NewDepth = FMath::Clamp(ClampMinDepth, -DepressDistance, ClampMinDepth);
+			float NewDepth = FMath::Clamp(GetAxisValue(InitialComponentLoc) + (-CheckDepth), -DepressDistance, ClampMinDepth);
 			this->SetRelativeLocation(InitialRelativeTransform.TransformPosition(SetAxisValue(NewDepth)), false);
+
+			if (ButtonType == EVRButtonType::Btn_Toggle_Return || ButtonType == EVRButtonType::Btn_Toggle_Stay)
+			{
+				if ((StateChangeAuthorityType == EVRStateChangeAuthorityType::CanChangeState_All) ||
+					(StateChangeAuthorityType == EVRStateChangeAuthorityType::CanChangeState_Server && GetNetMode() < ENetMode::NM_Client) ||
+					(StateChangeAuthorityType == EVRStateChangeAuthorityType::CanChangeState_Owner && LocalLastInteractingActor.IsValid() && LocalLastInteractingActor->HasLocalNetOwner()))
+				{
+
+					if (!bToggledThisTouch && NewDepth <= (-ButtonEngageDepth) + KINDA_SMALL_NUMBER && (WorldTime - LastToggleTime) >= MinTimeBetweenEngaging)
+					{
+						LastToggleTime = WorldTime;
+						bToggledThisTouch = true;
+						bButtonState = !bButtonState;
+						ReceiveButtonStateChanged(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+						OnButtonStateChanged.Broadcast(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		// Std precision tolerance should be fine
+		if (this->RelativeLocation.Equals(GetTargetRelativeLocation()))
+		{
+			this->SetComponentTickEnabled(false);
+
+			OnButtonEndInteraction.Broadcast(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+			ReceiveButtonEndInteraction(LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+
+			LocalInteractingComponent.Reset(); // Just reset it here so it only does it once
+			LocalLastInteractingComponent.Reset();
 		}
 		else
-			this->SetComponentTickEnabled(true); // This will trigger the lerp to resting position
-
-	}break;
-	default:break;
+			this->SetRelativeLocation(FMath::VInterpConstantTo(this->RelativeLocation, GetTargetRelativeLocation(), DeltaTime, DepressSpeed), false);
 	}
-}
 
-void UVRButtonComponent::SetButtonState(bool bNewButtonState, bool bCallButtonChangedEvent, bool bSnapIntoPosition)
-{
-	// No change
-	if (bButtonState == bNewButtonState)
-		return;
 
-	bButtonState = bNewButtonState;
-	SetButtonToRestingPosition(!bSnapIntoPosition);
-	LastToggleTime = GetWorld()->GetTimeSeconds();
-
-	if (bCallButtonChangedEvent)
+	// Press buttons always get checked, both during press AND during lerping for if they are active or not.
+	if (ButtonType == EVRButtonType::Btn_Press)
 	{
-		ReceiveButtonStateChanged(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
-		OnButtonStateChanged.Broadcast(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+		if ((StateChangeAuthorityType == EVRStateChangeAuthorityType::CanChangeState_All) ||
+			(StateChangeAuthorityType == EVRStateChangeAuthorityType::CanChangeState_Server && GetNetMode() < ENetMode::NM_Client) ||
+			(StateChangeAuthorityType == EVRStateChangeAuthorityType::CanChangeState_Owner && LocalLastInteractingActor.IsValid() && LocalLastInteractingActor->HasLocalNetOwner()))
+		{
+			// Check for if we should set the state of the button, done here as for the press button the lerp counts for input
+			bool bCheckState = (GetAxisValue(InitialRelativeTransform.InverseTransformPosition(this->RelativeLocation)) <= (-ButtonEngageDepth) + KINDA_SMALL_NUMBER);
+			if (bButtonState != bCheckState && (WorldTime - LastToggleTime) >= MinTimeBetweenEngaging)
+
+			{
+				LastToggleTime = WorldTime;
+				bButtonState = bCheckState;
+				ReceiveButtonStateChanged(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+				OnButtonStateChanged.Broadcast(bButtonState, LocalLastInteractingActor.Get(), LocalLastInteractingComponent.Get());
+			}
+		}
 	}
+
 }
 
-void UVRButtonComponent::ResetInitialButtonLocation()
-{
-	// Get our initial relative transform to our parent (or not if un-parented).
-	InitialRelativeTransform = this->GetRelativeTransform();
-}
-
-bool UVRButtonComponent::IsButtonInUse()
-{
-	return LocalInteractingComponent.IsValid();
-}

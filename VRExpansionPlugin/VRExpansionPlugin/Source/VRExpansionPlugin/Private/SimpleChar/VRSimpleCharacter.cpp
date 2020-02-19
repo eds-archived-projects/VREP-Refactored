@@ -1,8 +1,17 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "SimpleChar/VRSimpleCharacter.h"
 //#include "Runtime/Engine/Private/EnginePrivate.h"
 
+
+// AVRSimpleCharacter
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 AVRSimpleCharacter::AVRSimpleCharacter(const FObjectInitializer& ObjectInitializer)
  : Super(ObjectInitializer.SetDefaultSubobjectClass<UVRSimpleCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 
@@ -66,6 +75,8 @@ AVRSimpleCharacter::AVRSimpleCharacter(const FObjectInitializer& ObjectInitializ
 	}
 }
 
+// Functions
+
 void AVRSimpleCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -97,40 +108,32 @@ FVector AVRSimpleCharacter::GetTeleportLocation(FVector OriginalLocation)
 	return OriginalLocation;
 }
 
-bool AVRSimpleCharacter::TeleportTo(const FVector& DestLocation, const FRotator& DestRotation, bool bIsATest, bool bNoCheck)
+/////////////////////////////// REPLICATION ///////////////////////////
+
+void AVRSimpleCharacter::ServerMoveVR_Implementation(
+	float TimeStamp,
+	FVector_NetQuantize10 InAccel,
+	FVector_NetQuantize100 ClientLoc,
+	FVRConditionalMoveRep ConditionalReps,
+	FVector_NetQuantize100 LFDiff,
+	uint8 MoveFlags,
+	FVRConditionalMoveRep2 MoveReps,
+	uint8 ClientMovementMode)
 {
-	bool bTeleportSucceeded = Super::TeleportTo(DestLocation + FVector(0,0,GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), DestRotation, bIsATest, bNoCheck);
-
-	if (bTeleportSucceeded)
-	{
-		if (GetNetMode() != ENetMode::NM_Client)
-		{
-			NotifyOfTeleport();
-		}
-
-		if (LeftMotionController)
-			LeftMotionController->bIsPostTeleport = true;
-
-		if (RightMotionController)
-			RightMotionController->bIsPostTeleport = true;
-	}
-
-	return bTeleportSucceeded;
+	((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVR_Implementation(
+		TimeStamp,
+		InAccel,
+		ClientLoc,
+		ConditionalReps,
+		LFDiff,
+		MoveFlags,
+		MoveReps,
+		ClientMovementMode);
 }
 
 bool AVRSimpleCharacter::ServerMoveVR_Validate(float TimeStamp, FVector_NetQuantize10 InAccel, FVector_NetQuantize100 ClientLoc, FVRConditionalMoveRep ConditionalReps, FVector_NetQuantize100 LFDiff, uint8 MoveFlags, FVRConditionalMoveRep2 MoveReps, uint8 ClientMovementMode)
 {
 	return ((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVR_Validate(TimeStamp, InAccel, ClientLoc, ConditionalReps, LFDiff, MoveFlags, MoveReps, ClientMovementMode);
-}
-
-bool AVRSimpleCharacter::ServerMoveVRDual_Validate(float TimeStamp0, FVector_NetQuantize10 InAccel0, uint8 PendingFlags, uint32 View0, FVRConditionalMoveRep OldConditionalReps, FVector_NetQuantize100 OldLFDiff, float TimeStamp, FVector_NetQuantize10 InAccel, FVector_NetQuantize100 ClientLoc, FVRConditionalMoveRep ConditionalReps, FVector_NetQuantize100 LFDiff, uint8 NewFlags, FVRConditionalMoveRep2 MoveReps, uint8 ClientMovementMode)
-{
-	return ((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVRDual_Validate(TimeStamp0, InAccel0, PendingFlags, View0, OldConditionalReps, OldLFDiff, TimeStamp, InAccel, ClientLoc, ConditionalReps, LFDiff, NewFlags, MoveReps, ClientMovementMode);
-}
-
-bool AVRSimpleCharacter::ServerMoveVRDualHybridRootMotion_Validate(float TimeStamp0, FVector_NetQuantize10 InAccel0, uint8 PendingFlags, uint32 View0, FVRConditionalMoveRep OldConditionalReps, FVector_NetQuantize100 OldLFDiff, float TimeStamp, FVector_NetQuantize10 InAccel, FVector_NetQuantize100 ClientLoc, FVRConditionalMoveRep ConditionalReps, FVector_NetQuantize100 LFDiff, uint8 NewFlags, FVRConditionalMoveRep2 MoveReps, uint8 ClientMovementMode)
-{
-	return ((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVRDualHybridRootMotion_Validate(TimeStamp0, InAccel0, PendingFlags, View0, OldConditionalReps, OldLFDiff, TimeStamp, InAccel, ClientLoc, ConditionalReps, LFDiff, NewFlags, MoveReps, ClientMovementMode);
 }
 
 void AVRSimpleCharacter::ServerMoveVRDual_Implementation(
@@ -166,6 +169,11 @@ void AVRSimpleCharacter::ServerMoveVRDual_Implementation(
 		ClientMovementMode);
 }
 
+bool AVRSimpleCharacter::ServerMoveVRDual_Validate(float TimeStamp0, FVector_NetQuantize10 InAccel0, uint8 PendingFlags, uint32 View0, FVRConditionalMoveRep OldConditionalReps, FVector_NetQuantize100 OldLFDiff, float TimeStamp, FVector_NetQuantize10 InAccel, FVector_NetQuantize100 ClientLoc, FVRConditionalMoveRep ConditionalReps, FVector_NetQuantize100 LFDiff, uint8 NewFlags, FVRConditionalMoveRep2 MoveReps, uint8 ClientMovementMode)
+{
+	return ((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVRDual_Validate(TimeStamp0, InAccel0, PendingFlags, View0, OldConditionalReps, OldLFDiff, TimeStamp, InAccel, ClientLoc, ConditionalReps, LFDiff, NewFlags, MoveReps, ClientMovementMode);
+}
+
 void AVRSimpleCharacter::ServerMoveVRDualHybridRootMotion_Implementation(
 	float TimeStamp0,
 	FVector_NetQuantize10 InAccel0,
@@ -199,23 +207,28 @@ void AVRSimpleCharacter::ServerMoveVRDualHybridRootMotion_Implementation(
 		ClientMovementMode);
 }
 
-void AVRSimpleCharacter::ServerMoveVR_Implementation(
-	float TimeStamp,
-	FVector_NetQuantize10 InAccel,
-	FVector_NetQuantize100 ClientLoc,
-	FVRConditionalMoveRep ConditionalReps,
-	FVector_NetQuantize100 LFDiff,
-	uint8 MoveFlags,
-	FVRConditionalMoveRep2 MoveReps,
-	uint8 ClientMovementMode)
+bool AVRSimpleCharacter::ServerMoveVRDualHybridRootMotion_Validate(float TimeStamp0, FVector_NetQuantize10 InAccel0, uint8 PendingFlags, uint32 View0, FVRConditionalMoveRep OldConditionalReps, FVector_NetQuantize100 OldLFDiff, float TimeStamp, FVector_NetQuantize10 InAccel, FVector_NetQuantize100 ClientLoc, FVRConditionalMoveRep ConditionalReps, FVector_NetQuantize100 LFDiff, uint8 NewFlags, FVRConditionalMoveRep2 MoveReps, uint8 ClientMovementMode)
 {
-	((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVR_Implementation(
-		TimeStamp,
-		InAccel,
-		ClientLoc,
-		ConditionalReps,
-		LFDiff,
-		MoveFlags,
-		MoveReps,
-		ClientMovementMode);
+	return ((UVRSimpleCharacterMovementComponent*)GetCharacterMovement())->ServerMoveVRDualHybridRootMotion_Validate(TimeStamp0, InAccel0, PendingFlags, View0, OldConditionalReps, OldLFDiff, TimeStamp, InAccel, ClientLoc, ConditionalReps, LFDiff, NewFlags, MoveReps, ClientMovementMode);
+}
+
+bool AVRSimpleCharacter::TeleportTo(const FVector& DestLocation, const FRotator& DestRotation, bool bIsATest, bool bNoCheck)
+{
+	bool bTeleportSucceeded = Super::TeleportTo(DestLocation + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), DestRotation, bIsATest, bNoCheck);
+
+	if (bTeleportSucceeded)
+	{
+		if (GetNetMode() != ENetMode::NM_Client)
+		{
+			NotifyOfTeleport();
+		}
+
+		if (LeftMotionController)
+			LeftMotionController->bIsPostTeleport = true;
+
+		if (RightMotionController)
+			RightMotionController->bIsPostTeleport = true;
+	}
+
+	return bTeleportSucceeded;
 }

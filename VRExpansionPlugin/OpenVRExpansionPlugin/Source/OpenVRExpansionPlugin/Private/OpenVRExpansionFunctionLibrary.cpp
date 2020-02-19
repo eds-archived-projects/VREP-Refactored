@@ -45,7 +45,7 @@ EBPOpenVRHMDDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRHMDType()
 		// Already declared in some of our includes here
 		//static const FName SteamVRSysName(TEXT("SteamVR"));
 		static const FName OculusSystemName(TEXT("OculusHMD"));
-		static const FName OSVRSystemName(TEXT("OSVR"));
+		//static const FName OSVRSystemName(TEXT("OSVR"));
 
 		FName DeviceName(NAME_None);
 		DeviceName = GEngine->XRSystem->GetSystemName();
@@ -55,8 +55,8 @@ EBPOpenVRHMDDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRHMDType()
 			DeviceType = EBPOpenVRHMDDeviceType::DT_SteamVR;
 		else if (DeviceName == OculusSystemName)
 			DeviceType = EBPOpenVRHMDDeviceType::DT_OculusHMD;
-		else if (DeviceName == OSVRSystemName)
-			DeviceType = EBPOpenVRHMDDeviceType::DT_OSVR;
+		//else if (DeviceName == OSVRSystemName)
+			//DeviceType = EBPOpenVRHMDDeviceType::DT_OSVR;
 	}
 
 #if !STEAMVR_SUPPORTED_PLATFORM
@@ -70,15 +70,16 @@ EBPOpenVRHMDDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRHMDType()
 		EBPOVRResultSwitch Result;
 
 		// Using index 0 as it is always HMD
-		UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyString(EVRDeviceProperty_String::Prop_ModelNumber_String_1001, 0, DeviceModelNumber, Result);
+		UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyString(EVRDeviceProperty_String::Prop_ModelNumber_String_1001, vr::k_unTrackedDeviceIndex_Hmd, DeviceModelNumber, Result);
 		if (Result == EBPOVRResultSwitch::OnSucceeded)
 		{
-			UE_LOG(OpenVRExpansionFunctionLibraryLog, Display, TEXT("OpenVRDeviceType - Prop_ModelNumber_String_1001: %s"), *DeviceModelNumber);
+			//UE_LOG(OpenVRExpansionFunctionLibraryLog, Display, TEXT("OpenVRDeviceType - Prop_ModelNumber_String_1001: %s"), *DeviceModelNumber);
 
 			//#TODO: Screw this eventually, need it to be actual string value comparisons for each model
 			// This is the hacky workaround for now
 			/*
 				"Vive MV";
+				"Vive Cosmos"
 				"VIVE_Pro MV"
 				"Oculus Rift CV1";
 				"Lenovo Explorer";
@@ -90,10 +91,19 @@ EBPOpenVRHMDDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRHMDType()
 			// Manufacturer name
 			/*WindowsMR*/
 
-			if (DeviceModelNumber.Find("vive", ESearchCase::IgnoreCase) != INDEX_NONE)
+			if (DeviceModelNumber.Find("index", ESearchCase::IgnoreCase) != INDEX_NONE)
+			{
+				DeviceType = EBPOpenVRHMDDeviceType::DT_ValveIndex;
+			}
+			else if (DeviceModelNumber.Find("vive_cosmos", ESearchCase::IgnoreCase) != INDEX_NONE)
+			{
+				DeviceType = EBPOpenVRHMDDeviceType::DT_ViveCosmos;
+			}
+			else if (DeviceModelNumber.Find("vive", ESearchCase::IgnoreCase) != INDEX_NONE)
 			{
 				DeviceType = EBPOpenVRHMDDeviceType::DT_Vive;
 			}
+
 			else if (DeviceModelNumber.Find("oculus", ESearchCase::IgnoreCase) != INDEX_NONE)
 			{
 				DeviceType = EBPOpenVRHMDDeviceType::DT_OculusHMD;
@@ -109,7 +119,7 @@ EBPOpenVRHMDDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRHMDType()
 			else
 			{
 				// Check for manufacturer name for windows MR
-				UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyString(EVRDeviceProperty_String::Prop_ManufacturerName_String_1005, 0, DeviceModelNumber, Result);
+				UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyString(EVRDeviceProperty_String::Prop_ManufacturerName_String_1005, vr::k_unTrackedDeviceIndex_Hmd, DeviceModelNumber, Result);
 				if (Result == EBPOVRResultSwitch::OnSucceeded)
 				{
 					if (DeviceModelNumber.Find("WindowsMR", ESearchCase::IgnoreCase) != INDEX_NONE)
@@ -120,8 +130,96 @@ EBPOpenVRHMDDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRHMDType()
 				else
 				{
 					DeviceType = EBPOpenVRHMDDeviceType::DT_Unknown;
+#if WITH_EDITOR
+					UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Tell VRE about unhandled HMD model type: %s !!!"), *DeviceModelNumber);
+#endif
 				}
 			}
+		}
+	}
+
+	return DeviceType;
+#endif
+}
+
+EBPOpenVRControllerDeviceType UOpenVRExpansionFunctionLibrary::GetOpenVRControllerType()
+{
+
+	EBPOpenVRControllerDeviceType DeviceType = EBPOpenVRControllerDeviceType::DT_UnknownController;
+
+#if !STEAMVR_SUPPORTED_PLATFORM
+	return DeviceType;
+#else
+
+	if (!GEngine->XRSystem.IsValid() || (GEngine->XRSystem->GetSystemName() != SteamVRSystemName))
+	{
+		return DeviceType;
+	}
+
+	vr::IVRSystem* VRSystem = vr::VRSystem();
+
+	if (!VRSystem)
+	{
+		return DeviceType;
+	}
+
+	int32 DeviceIndexOut = INDEX_NONE;
+	int32 FallbackIndex = INDEX_NONE;
+
+	for (uint32 DeviceIndex = 0; DeviceIndex < vr::k_unMaxTrackedDeviceCount; ++DeviceIndex)
+	{
+		const vr::ETrackedDeviceClass DeviceClass = VRSystem->GetTrackedDeviceClass(DeviceIndex);
+		if (DeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_Controller)
+		{
+			// NOTE: GetControllerRoleForTrackedDeviceIndex() only seems to return a valid role if the device is on and being tracked
+			const vr::ETrackedControllerRole ControllerRole = VRSystem->GetControllerRoleForTrackedDeviceIndex(DeviceIndex);
+			if (ControllerRole != vr::TrackedControllerRole_LeftHand && ControllerRole != vr::TrackedControllerRole_RightHand)
+			{
+				continue;
+			}
+
+			DeviceIndexOut = DeviceIndex;
+			break;
+		}
+	}
+
+	if (DeviceIndexOut == INDEX_NONE)
+	{
+		return DeviceType;
+	}
+
+	EBPOVRResultSwitch Result;
+
+	FString DeviceModelNumber;
+	UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyString(EVRDeviceProperty_String::Prop_ModelNumber_String_1001, DeviceIndexOut, DeviceModelNumber, Result);
+	if (Result == EBPOVRResultSwitch::OnSucceeded)
+	{
+		if (DeviceModelNumber.Find("knuckles", ESearchCase::IgnoreCase) != INDEX_NONE || DeviceModelNumber.Find("index", ESearchCase::IgnoreCase) != INDEX_NONE)
+		{
+			DeviceType = EBPOpenVRControllerDeviceType::DT_IndexController;
+		}
+		else if (DeviceModelNumber.Find("VIVE Controller Pro", ESearchCase::IgnoreCase) != INDEX_NONE) // Vive Wand
+		{
+			DeviceType = EBPOpenVRControllerDeviceType::DT_ViveController;
+		}
+		else if (DeviceModelNumber.Find("VIVE Controller", ESearchCase::IgnoreCase) != INDEX_NONE) // Vive Wand
+		{
+			DeviceType = EBPOpenVRControllerDeviceType::DT_ViveController;
+		}
+		else if (DeviceModelNumber.Find("oculus rift cv1", ESearchCase::IgnoreCase) != INDEX_NONE) // Oculus Rift CV1
+		{
+			DeviceType = EBPOpenVRControllerDeviceType::DT_RiftController;
+		}		
+		else if (DeviceModelNumber.Find("oculus rift s", ESearchCase::IgnoreCase) != INDEX_NONE) // Oculus Rift CV1
+		{
+			DeviceType = EBPOpenVRControllerDeviceType::DT_RiftSController;
+		}
+		else
+		{
+#if WITH_EDITOR
+			UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Tell VRE about unhandled controller model type: %s !!!"), *DeviceModelNumber);
+			// Add other controllers here
+#endif
 		}
 	}
 
@@ -144,12 +242,9 @@ bool UOpenVRExpansionFunctionLibrary::HasVRCamera(EOpenVRCameraFrameType FrameTy
 	if (!GEngine->XRSystem.IsValid() || (GEngine->XRSystem->GetSystemName() != SteamVRSystemName))
 		return false;
 
-	vr::HmdError HmdErr;
-	//vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)(*VRGetGenericInterfaceFn)(vr::IVRTrackedCamera_Version, &HmdErr);
-	vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)vr::VR_GetGenericInterface(vr::IVRTrackedCamera_Version, &HmdErr);
+	vr::IVRTrackedCamera* VRCamera = vr::VRTrackedCamera();
 
-
-	if (!VRCamera || HmdErr != vr::HmdError::VRInitError_None)
+	if (!VRCamera)
 		return false;
 
 	bool pHasCamera;
@@ -193,11 +288,9 @@ void UOpenVRExpansionFunctionLibrary::AcquireVRCamera(FBPOpenVRCameraHandle & Ca
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	//vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)(*VRGetGenericInterfaceFn)(vr::IVRTrackedCamera_Version, &HmdErr);
-	vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)vr::VR_GetGenericInterface(vr::IVRTrackedCamera_Version, &HmdErr);
+	vr::IVRTrackedCamera* VRCamera = vr::VRTrackedCamera();
 
-	if (!VRCamera || HmdErr != vr::HmdError::VRInitError_None)
+	if (!VRCamera)
 	{
 		Result = EBPOVRResultSwitch::OnFailed;
 		return;
@@ -240,11 +333,10 @@ void UOpenVRExpansionFunctionLibrary::ReleaseVRCamera(UPARAM(ref) FBPOpenVRCamer
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	//vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)(*VRGetGenericInterfaceFn)(vr::IVRTrackedCamera_Version, &HmdErr);
-	vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)vr::VR_GetGenericInterface(vr::IVRTrackedCamera_Version, &HmdErr);
 
-	if (!VRCamera || HmdErr != vr::HmdError::VRInitError_None)
+	vr::IVRTrackedCamera* VRCamera = vr::VRTrackedCamera();
+
+	if (!VRCamera)
 	{
 		Result = EBPOVRResultSwitch::OnFailed;
 		return;
@@ -286,11 +378,9 @@ UTexture2D * UOpenVRExpansionFunctionLibrary::CreateCameraTexture2D(UPARAM(ref) 
 		return nullptr;
 	}
 
-	vr::HmdError HmdErr;
-	//vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)(*VRGetGenericInterfaceFn)(vr::IVRTrackedCamera_Version, &HmdErr);
-	vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)vr::VR_GetGenericInterface(vr::IVRTrackedCamera_Version, &HmdErr);
+	vr::IVRTrackedCamera* VRCamera = vr::VRTrackedCamera();
 
-	if (!VRCamera || HmdErr != vr::HmdError::VRInitError_None)
+	if (!VRCamera)
 	{
 		Result = EBPOVRResultSwitch::OnFailed;
 		return nullptr;
@@ -341,11 +431,9 @@ void UOpenVRExpansionFunctionLibrary::GetVRCameraFrame(UPARAM(ref) FBPOpenVRCame
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	//vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)(*VRGetGenericInterfaceFn)(vr::IVRTrackedCamera_Version, &HmdErr);
-	vr::IVRTrackedCamera * VRCamera = (vr::IVRTrackedCamera*)vr::VR_GetGenericInterface(vr::IVRTrackedCamera_Version, &HmdErr);
+	vr::IVRTrackedCamera* VRCamera = vr::VRTrackedCamera();
 
-	if (!VRCamera || HmdErr != vr::HmdError::VRInitError_None)
+	if (!VRCamera)
 	{
 		Result = EBPOVRResultSwitch::OnFailed;
 		return;
@@ -455,8 +543,7 @@ void UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyString(EVRDevicePropert
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
@@ -503,8 +590,7 @@ void UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyBool(EVRDeviceProperty_
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
@@ -549,8 +635,7 @@ void UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyFloat(EVRDeviceProperty
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
@@ -595,8 +680,7 @@ void UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyInt32(EVRDeviceProperty
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
@@ -641,8 +725,7 @@ void UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyUInt64(EVRDevicePropert
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
@@ -687,8 +770,7 @@ void UOpenVRExpansionFunctionLibrary::GetVRDevicePropertyMatrix34AsTransform(EVR
 		return;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
@@ -730,13 +812,11 @@ EBPOpenVRTrackedDeviceClass UOpenVRExpansionFunctionLibrary::GetOpenVRDeviceType
 	if (OpenVRDeviceIndex < 0 || OpenVRDeviceIndex > (vr::k_unMaxTrackedDeviceCount - 1))
 		return EBPOpenVRTrackedDeviceClass::TrackedDeviceClass_Invalid;
 
-	vr::HmdError HmdErr;
-	//vr::IVRSystem * VRSystem = (vr::IVRSystem*)(*VRGetGenericInterfaceFn)(vr::IVRSystem_Version, &HmdErr);
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrorCode %i in GetOpenVRDevices"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrored in GetOpenVRDevices"));
 		return EBPOpenVRTrackedDeviceClass::TrackedDeviceClass_Invalid;
 	}
 
@@ -749,13 +829,11 @@ void UOpenVRExpansionFunctionLibrary::GetOpenVRDevices(TArray<EBPOpenVRTrackedDe
 #if !STEAMVR_SUPPORTED_PLATFORM
 #else
 
-	vr::HmdError HmdErr;
-	//vr::IVRSystem * VRSystem = (vr::IVRSystem*)(*VRGetGenericInterfaceFn)(vr::IVRSystem_Version, &HmdErr);
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrorCode %i in GetOpenVRDevices"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrored in GetOpenVRDevices"));
 		return;
 	}
 
@@ -775,13 +853,11 @@ void UOpenVRExpansionFunctionLibrary::GetOpenVRDevicesByType(EBPOpenVRTrackedDev
 #if !STEAMVR_SUPPORTED_PLATFORM
 #else
 
-	vr::HmdError HmdErr;
-	//vr::IVRSystem * VRSystem = (vr::IVRSystem*)(*VRGetGenericInterfaceFn)(vr::IVRSystem_Version, &HmdErr);
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrorCode %i in GetOpenVRDevices"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrored in GetOpenVRDevices"));
 		return;
 	}
 
@@ -799,13 +875,11 @@ bool UOpenVRExpansionFunctionLibrary::IsOpenVRDeviceConnected(int32 OpenVRDevice
 	return false;
 #else
 
-	vr::HmdError HmdErr;
-	//vr::IVRSystem * VRSystem = (vr::IVRSystem*)(*VRGetGenericInterfaceFn)(vr::IVRSystem_Version, &HmdErr);
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrorCode %i in IsOpenVRDeviceConnected"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrored in IsOpenVRDeviceConnected"));
 		return false;
 	}
 
@@ -814,7 +888,7 @@ bool UOpenVRExpansionFunctionLibrary::IsOpenVRDeviceConnected(int32 OpenVRDevice
 #endif
 }
 
-UTexture2D * UOpenVRExpansionFunctionLibrary::GetVRDeviceModelAndTexture(UObject* WorldContextObject, EBPOpenVRTrackedDeviceClass DeviceType, TArray<UProceduralMeshComponent *> ProceduralMeshComponentsToFill, bool bCreateCollision, EAsyncBlueprintResultSwitch &Result, int32 OverrideDeviceID)
+UTexture2D * UOpenVRExpansionFunctionLibrary::GetVRDeviceModelAndTexture(UObject* WorldContextObject, FString RenderModelNameOverride, FString& RenderModelNameOut, EBPOpenVRTrackedDeviceClass DeviceType, TArray<UProceduralMeshComponent *> ProceduralMeshComponentsToFill, bool bCreateCollision, EAsyncBlueprintResultSwitch &Result, int32 OverrideDeviceID)
 {
 
 #if !STEAMVR_SUPPORTED_PLATFORM
@@ -823,21 +897,18 @@ UTexture2D * UOpenVRExpansionFunctionLibrary::GetVRDeviceModelAndTexture(UObject
 	return NULL;
 #else
 
-	vr::HmdError HmdErr;
-	//vr::IVRSystem * VRSystem = (vr::IVRSystem*)(*VRGetGenericInterfaceFn)(vr::IVRSystem_Version, &HmdErr);
-	vr::IVRSystem * VRSystem = (vr::IVRSystem*)vr::VR_GetGenericInterface(vr::IVRSystem_Version, &HmdErr);
+	vr::IVRSystem* VRSystem = vr::VRSystem();
 
 	if (!VRSystem)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VRSystem InterfaceErrored"));
 	}
 
-	//vr::IVRRenderModels * VRRenderModels = (vr::IVRRenderModels*)(*VRGetGenericInterfaceFn)(vr::IVRRenderModels_Version, &HmdErr);
-	vr::IVRRenderModels * VRRenderModels = (vr::IVRRenderModels*)vr::VR_GetGenericInterface(vr::IVRRenderModels_Version, &HmdErr);
+	vr::IVRRenderModels* VRRenderModels = vr::VRRenderModels();
 
 	if (!VRRenderModels)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Render Models InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Render Models Errored"));
 	}
 
 
@@ -848,43 +919,57 @@ UTexture2D * UOpenVRExpansionFunctionLibrary::GetVRDeviceModelAndTexture(UObject
 		return nullptr;
 	}
 
-	int32 DeviceID = 0;
-	if (OverrideDeviceID != -1)
+	char RenderModelName[vr::k_unMaxPropertyStringSize];
+	FMemory::Memzero(&RenderModelName, vr::k_unMaxPropertyStringSize);
+
+	if (!RenderModelNameOverride.IsEmpty())
 	{
-		DeviceID = (uint32)OverrideDeviceID;
-		if (OverrideDeviceID > (vr::k_unMaxTrackedDeviceCount - 1) || VRSystem->GetTrackedDeviceClass(DeviceID) == vr::k_unTrackedDeviceIndexInvalid)
-		{
-			UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Override Tracked Device Was Missing!!"));
-			Result = EAsyncBlueprintResultSwitch::OnFailure;
-			return nullptr;
-		}
+		int len = RenderModelNameOverride.Len();
+		FMemory::Memcpy(&RenderModelName, TCHAR_TO_ANSI(*RenderModelNameOverride), len > vr::k_unMaxPropertyStringSize ? vr::k_unMaxPropertyStringSize : len);
+		RenderModelNameOut = RenderModelNameOverride;
 	}
 	else
 	{
-		TArray<int32> FoundIDs;
-		UOpenVRExpansionFunctionLibrary::GetOpenVRDevicesByType(DeviceType, FoundIDs);
-
-		if (FoundIDs.Num() == 0)
+		int32 DeviceID = 0;
+		if (OverrideDeviceID != -1)
 		{
-			UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Couldn't Get Tracked Devices!!"));
-			Result = EAsyncBlueprintResultSwitch::OnFailure;
-			return nullptr;
+			DeviceID = (uint32)OverrideDeviceID;
+			if (OverrideDeviceID > (vr::k_unMaxTrackedDeviceCount - 1) || VRSystem->GetTrackedDeviceClass(DeviceID) == vr::k_unTrackedDeviceIndexInvalid)
+			{
+				UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Override Tracked Device Was Missing!!"));
+				Result = EAsyncBlueprintResultSwitch::OnFailure;
+				return nullptr;
+			}
+		}
+		else
+		{
+			TArray<int32> FoundIDs;
+			UOpenVRExpansionFunctionLibrary::GetOpenVRDevicesByType(DeviceType, FoundIDs);
+
+			if (FoundIDs.Num() == 0)
+			{
+				UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Couldn't Get Tracked Devices!!"));
+				Result = EAsyncBlueprintResultSwitch::OnFailure;
+				return nullptr;
+			}
+
+			DeviceID = FoundIDs[0];
 		}
 
-		DeviceID = FoundIDs[0];
-	}
+		vr::TrackedPropertyError pError = vr::TrackedPropertyError::TrackedProp_Success;
 
-	vr::TrackedPropertyError pError = vr::TrackedPropertyError::TrackedProp_Success;
+		uint32_t buffersize = vr::k_unMaxPropertyStringSize;
+		uint32_t ret = VRSystem->GetStringTrackedDeviceProperty(DeviceID, vr::ETrackedDeviceProperty::Prop_RenderModelName_String, RenderModelName, buffersize, &pError);
 
-	char RenderModelName[vr::k_unMaxPropertyStringSize];
-	uint32_t buffersize = vr::k_unMaxPropertyStringSize;
-	uint32_t ret = VRSystem->GetStringTrackedDeviceProperty(DeviceID, vr::ETrackedDeviceProperty::Prop_RenderModelName_String, RenderModelName, buffersize, &pError);
+		if (pError != vr::TrackedPropertyError::TrackedProp_Success)
+		{
+			UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Couldn't Get Render Model Name String!!"));
+			Result = EAsyncBlueprintResultSwitch::OnFailure;
+			return nullptr;
 
-	if (pError != vr::TrackedPropertyError::TrackedProp_Success)
-	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Couldn't Get Render Model Name String!!"));
-		Result = EAsyncBlueprintResultSwitch::OnFailure;
-		return nullptr;
+		}
+
+		RenderModelNameOut = FString(ANSI_TO_TCHAR(RenderModelName));
 	}
 
 	//uint32_t numComponents = VRRenderModels->GetComponentCount("vr_controller_vive_1_5");
@@ -1051,12 +1136,11 @@ bool UOpenVRExpansionFunctionLibrary::SetSkyboxOverride_LatLongStereoPair(UTextu
 		return false;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1091,12 +1175,11 @@ bool UOpenVRExpansionFunctionLibrary::SetSkyboxOverride_LatLong(UTexture2D * Lat
 		return false;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1130,12 +1213,11 @@ bool UOpenVRExpansionFunctionLibrary::SetSkyboxOverride(UTexture * tFront, UText
 		return false;
 	}
 
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1167,12 +1249,11 @@ bool UOpenVRExpansionFunctionLibrary::ClearSkyboxOverride()
 	UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Not SteamVR Supported Platform!!"));
 	return false;
 #else
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1189,12 +1270,11 @@ bool UOpenVRExpansionFunctionLibrary::FadeHMDToColor(float fSeconds, FColor Colo
 	UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Not SteamVR Supported Platform!!"));
 	return false;
 #else
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1211,12 +1291,11 @@ bool UOpenVRExpansionFunctionLibrary::GetCurrentHMDFadeColor(FColor & ColorOut, 
 	UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Not SteamVR Supported Platform!!"));
 	return false;
 #else
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1234,12 +1313,11 @@ bool UOpenVRExpansionFunctionLibrary::FadeVRGrid(float fSeconds, bool bFadeIn)
 	UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Not SteamVR Supported Platform!!"));
 	return false;
 #else
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1255,12 +1333,11 @@ bool UOpenVRExpansionFunctionLibrary::GetCurrentVRGridAlpha(float & VRGridAlpha)
 	UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Not SteamVR Supported Platform!!"));
 	return false;
 #else
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 
@@ -1276,12 +1353,11 @@ bool UOpenVRExpansionFunctionLibrary::SetSuspendRendering(bool bSuspendRendering
 	UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("Not SteamVR Supported Platform!!"));
 	return false;
 #else
-	vr::HmdError HmdErr;
-	vr::IVRCompositor * VRCompositor = (vr::IVRCompositor*)vr::VR_GetGenericInterface(vr::IVRCompositor_Version, &HmdErr);
+	vr::IVRCompositor* VRCompositor = vr::VRCompositor();
 
 	if (!VRCompositor)
 	{
-		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrorCode %i"), (int32)HmdErr);
+		UE_LOG(OpenVRExpansionFunctionLibraryLog, Warning, TEXT("VR Compositor InterfaceErrored"));
 		return false;
 	}
 

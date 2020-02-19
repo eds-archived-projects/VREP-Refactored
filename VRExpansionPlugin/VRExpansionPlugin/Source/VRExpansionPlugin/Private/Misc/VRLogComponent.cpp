@@ -1,12 +1,23 @@
 // Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 
+// Parent Header
 #include "Misc/VRLogComponent.h"
+
+// Unreal
 #include "Engine/Engine.h"
+
+// VREP
 
 /* Top of File */
 #define LOCTEXT_NAMESPACE "VRLogComponent" 
 
-  //=============================================================================
+// UVRLogComponent
+
+// Public
+
+// Constructor & Destructor
+
+//=============================================================================
 UVRLogComponent::UVRLogComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -21,30 +32,7 @@ UVRLogComponent::~UVRLogComponent()
 
 }
 
-
-void UVRLogComponent::SetConsoleText(FString Text)
-{
-	UConsole* ViewportConsole = (GEngine->GameViewport != nullptr) ? GEngine->GameViewport->ViewportConsole : nullptr;
-
-	if (!ViewportConsole)
-		return;
-
-	// Using append because UpdatePrecompletedInputLine is private and append calls it
-	ViewportConsole->SetInputText("");
-	ViewportConsole->AppendInputText(Text);
-}
-
-void UVRLogComponent::SendKeyEventToConsole(FKey Key, EInputEvent KeyEvent)
-{
-	UConsole* ViewportConsole = (GEngine->GameViewport != nullptr) ? GEngine->GameViewport->ViewportConsole : nullptr;
-
-	if (!ViewportConsole)
-		return;
-
-	ViewportConsole->FakeGotoState(FName(TEXT("Typing")));
-	ViewportConsole->InputKey(0, Key, KeyEvent);
-	ViewportConsole->FakeGotoState(NAME_None);
-}
+// Functions
 
 void UVRLogComponent::AppendTextToConsole(FString Text, bool bReturnAtEnd)
 {
@@ -61,6 +49,16 @@ void UVRLogComponent::AppendTextToConsole(FString Text, bool bReturnAtEnd)
 		ViewportConsole->InputKey(0, EKeys::Enter, EInputEvent::IE_Released);
 		ViewportConsole->FakeGotoState(NAME_None);
 	}
+
+}
+
+void UVRLogComponent::DrawConsole(bool bLowerHalf, UCanvas* Canvas)
+{
+	UConsole* ViewportConsole = (GEngine->GameViewport != nullptr) ? GEngine->GameViewport->ViewportConsole : nullptr;
+	if (!ViewportConsole)
+		return;
+
+	ViewportConsole->PostRender_Console_Open(Canvas);
 
 }
 
@@ -100,7 +98,7 @@ bool UVRLogComponent::DrawConsoleToRenderTarget2D(EBPVRConsoleDrawType DrawType,
 
 	switch (DrawType)
 	{
-	//case EBPVRConsoleDrawType::VRConsole_Draw_ConsoleAndOutputLog: DrawConsole(true, Canvas); DrawOutputLog(true, Canvas); break;
+		//case EBPVRConsoleDrawType::VRConsole_Draw_ConsoleAndOutputLog: DrawConsole(true, Canvas); DrawOutputLog(true, Canvas); break;
 	case EBPVRConsoleDrawType::VRConsole_Draw_ConsoleOnly: DrawConsole(false, Canvas); break;
 	case EBPVRConsoleDrawType::VRConsole_Draw_OutputLogOnly: DrawOutputLog(false, Canvas, ScrollOffset); break;
 	default: break;
@@ -129,18 +127,6 @@ bool UVRLogComponent::DrawConsoleToRenderTarget2D(EBPVRConsoleDrawType DrawType,
 	return true;
 }
 
-
-
-void UVRLogComponent::DrawConsole(bool bLowerHalf, UCanvas* Canvas)
-{
-	UConsole* ViewportConsole = (GEngine->GameViewport != nullptr) ? GEngine->GameViewport->ViewportConsole : nullptr;
-	if (!ViewportConsole)
-		return;
-
-	ViewportConsole->PostRender_Console_Open(Canvas);
-
-}
-
 void UVRLogComponent::DrawOutputLog(bool bUpperHalf, UCanvas* Canvas, float ScrollOffset)
 {
 	UFont* Font = GEngine->GetSmallFont();// GEngine->GetTinyFont();//GEngine->GetSmallFont();
@@ -164,11 +150,11 @@ void UVRLogComponent::DrawOutputLog(bool bUpperHalf, UCanvas* Canvas, float Scro
 	FCanvasTextItem ConsoleText(FVector2D(0, 0 + Height - 5 - yl), FText::FromString(TEXT("")), Font, FColor::Emerald);
 
 	const TArray< TSharedPtr<FVRLogMessage> > LoggedMessages = OutputLogHistory.GetMessages();
-	
+
 	int32 ScrollPos = 0;
 
-	if(ScrollOffset > 0 && LoggedMessages.Num() > 1)
-		ScrollPos = FMath::Clamp(FMath::RoundToInt(LoggedMessages.Num() * ScrollOffset ) , 0, LoggedMessages.Num() - 1);
+	if (ScrollOffset > 0 && LoggedMessages.Num() > 1)
+		ScrollPos = FMath::Clamp(FMath::RoundToInt(LoggedMessages.Num() * ScrollOffset), 0, LoggedMessages.Num() - 1);
 
 	float Xpos = 0.0f;
 	float Ypos = 0.0f;
@@ -178,11 +164,11 @@ void UVRLogComponent::DrawOutputLog(bool bUpperHalf, UCanvas* Canvas, float Scro
 		{
 
 		case ELogVerbosity::Error:
-		case ELogVerbosity::Fatal: ConsoleText.SetColor(FLinearColor(0.7f,0.1f,0.1f)); break;
-		case ELogVerbosity::Warning: ConsoleText.SetColor(FLinearColor(0.5f,0.5f,0.0f)); break;
+		case ELogVerbosity::Fatal: ConsoleText.SetColor(FLinearColor(0.7f, 0.1f, 0.1f)); break;
+		case ELogVerbosity::Warning: ConsoleText.SetColor(FLinearColor(0.5f, 0.5f, 0.0f)); break;
 
 		case ELogVerbosity::Log:
-		default: ConsoleText.SetColor(FLinearColor(0.8f,0.8f,0.8f));
+		default: ConsoleText.SetColor(FLinearColor(0.8f, 0.8f, 0.8f));
 		}
 
 		Ypos += yl;
@@ -193,7 +179,29 @@ void UVRLogComponent::DrawOutputLog(bool bUpperHalf, UCanvas* Canvas, float Scro
 	OutputLogHistory.bIsDirty = false;
 }
 
+void UVRLogComponent::SetConsoleText(FString Text)
+{
+	UConsole* ViewportConsole = (GEngine->GameViewport != nullptr) ? GEngine->GameViewport->ViewportConsole : nullptr;
 
+	if (!ViewportConsole)
+		return;
+
+	// Using append because UpdatePrecompletedInputLine is private and append calls it
+	ViewportConsole->SetInputText("");
+	ViewportConsole->AppendInputText(Text);
+}
+
+void UVRLogComponent::SendKeyEventToConsole(FKey Key, EInputEvent KeyEvent)
+{
+	UConsole* ViewportConsole = (GEngine->GameViewport != nullptr) ? GEngine->GameViewport->ViewportConsole : nullptr;
+
+	if (!ViewportConsole)
+		return;
+
+	ViewportConsole->FakeGotoState(FName(TEXT("Typing")));
+	ViewportConsole->InputKey(0, Key, KeyEvent);
+	ViewportConsole->FakeGotoState(NAME_None);
+}
 
 #undef LOCTEXT_NAMESPACE 
 /* Bottom of File */

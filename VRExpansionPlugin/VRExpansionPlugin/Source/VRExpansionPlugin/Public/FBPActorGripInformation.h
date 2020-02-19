@@ -101,28 +101,11 @@ public:
 	struct FGripValueCache
 	{
 		bool bWasInitiallyRepped                             ;
-		bool bCachedHasSecondaryAttachment;
-		FTransform_NetQuantize CachedSecondaryRelativeTransform;
-		EGripCollisionType CachedGripCollisionType;
-		EGripMovementReplicationSettings CachedGripMovementReplicationSetting;
-		float CachedStiffness;
-		float CachedDamping;
-		FBPAdvGripPhysicsSettings CachedPhysicsSettings;
-		FName CachedBoneName;
 		uint8 CachedGripID;
-		USceneComponent * OldSecondaryAttachment;
 
 		FGripValueCache() :
 			bWasInitiallyRepped(false),
-			bCachedHasSecondaryAttachment(false),
-			CachedSecondaryRelativeTransform(FTransform::Identity),
-			CachedGripCollisionType(EGripCollisionType::InteractiveCollisionWithSweep),
-			CachedGripMovementReplicationSetting(EGripMovementReplicationSettings::ForceClientSideMovement),
-			CachedStiffness(1500.0f),
-			CachedDamping(200.0f),
-			CachedBoneName(NAME_None),
-			CachedGripID(INVALID_VRGRIP_ID),
-			OldSecondaryAttachment(nullptr)
+      CachedGripID(INVALID_VRGRIP_ID)
 		{}
 
 	};

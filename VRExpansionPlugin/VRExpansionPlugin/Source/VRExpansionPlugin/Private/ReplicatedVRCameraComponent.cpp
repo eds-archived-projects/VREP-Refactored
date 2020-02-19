@@ -5,6 +5,7 @@
 #include "Engine/Engine.h"
 #include "IXRTrackingSystem.h"
 #include "IXRCamera.h"
+#include "Rendering/MotionVectorSimulation.h"
 #include "VRBaseCharacter.h"
 #include "IHeadMountedDisplay.h"
 
@@ -58,17 +59,20 @@ UReplicatedVRCameraComponent::UReplicatedVRCameraComponent(const FObjectInitiali
 //=============================================================================
 void UReplicatedVRCameraComponent::GetLifetimeReplicatedProps(TArray< class FLifetimeProperty > & OutLifetimeProps) const
 {
-	/*
-	I am skipping the Scene component replication here
-	Generally components aren't set to replicate anyway and I need it to NOT pass the Relative position through the network.
-	There isn't much in the scene component to replicate anyway.
+
+	// I am skipping the Scene component replication here
+	// Generally components aren't set to replicate anyway and I need it to NOT pass the Relative position through the network
+	// There isn't much in the scene component to replicate anyway
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	*/
 
-	// Skipping the owner with this as the owner will use the location directly.
+	DISABLE_REPLICATED_PROPERTY(USceneComponent, RelativeLocation);
+	DISABLE_REPLICATED_PROPERTY(USceneComponent, RelativeRotation);
+	DISABLE_REPLICATED_PROPERTY(USceneComponent, RelativeScale3D);
+
+	// Skipping the owner with this as the owner will use the location directly
 	DOREPLIFETIME_CONDITION(UReplicatedVRCameraComponent, ReplicatedCameraTransform, COND_SkipOwner);
-	DOREPLIFETIME          (UReplicatedVRCameraComponent, NetUpdateRate                            );
-
+	DOREPLIFETIME(UReplicatedVRCameraComponent, NetUpdateRate);
+	DOREPLIFETIME(UReplicatedVRCameraComponent, bSmoothReplicatedMotion);
 	//DOREPLIFETIME(UReplicatedVRCameraComponent, bReplicateTransform);
 }
 
@@ -325,4 +329,6 @@ void UReplicatedVRCameraComponent::GetCameraView(float DeltaTime, FMinimalViewIn
 	{
 		DesiredView.PostProcessSettings = PostProcessSettings;
 	}
+	// If this camera component has a motion vector simumlation transform, use that for the current view's previous transform
+  DesiredView.PreviousViewTransform = FMotionVectorSimulation::Get().GetPreviousTransform(this);
 }

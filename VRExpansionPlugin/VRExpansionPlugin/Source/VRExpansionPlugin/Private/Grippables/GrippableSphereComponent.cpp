@@ -239,7 +239,7 @@ ESecondaryGripType UGrippableSphereComponent::SecondaryGripType_Implementation()
 	return VRGripInterfaceSettings.SecondaryGripType;
 }
 
-void UGrippableSphereComponent::SetHeld_Implementation(UGripMotionControllerComponent* HoldingController, uint8 GripID, bool bIsHeld)
+void UGrippableSphereComponent::SetHeld_Implementation(UGripMotionControllerComponent * HoldingController, uint8 GripID, bool bIsHeld)
 {
 	if (bIsHeld)
 	{
@@ -250,6 +250,7 @@ void UGrippableSphereComponent::SetHeld_Implementation(UGripMotionControllerComp
 			bReplicateMovement = false;
 		}
 
+		VRGripInterfaceSettings.bWasHeld = true;
 		VRGripInterfaceSettings.HoldingControllers.AddUnique(FBPGripPair(HoldingController, GripID));
 	}
 	else
