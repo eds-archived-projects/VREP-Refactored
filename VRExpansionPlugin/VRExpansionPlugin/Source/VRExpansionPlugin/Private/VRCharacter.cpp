@@ -186,18 +186,6 @@ FVector AVRCharacter::GetTeleportLocation(FVector OriginalLocation)
 	return OriginalLocation - modifier;
 }
 
-void AVRCharacter::NotifyOfTeleport_Implementation()
-{
-	if (!IsLocallyControlled())
-	{
-		if (LeftMotionController)
-			LeftMotionController->bIsPostTeleport = true;
-
-		if (RightMotionController)
-			RightMotionController->bIsPostTeleport = true;
-	}
-}
-
 void AVRCharacter::RegenerateOffsetComponentToWorld(bool bUpdateBounds, bool bCalculatePureYaw)
 {
 	if (VRRootReference)
@@ -445,16 +433,7 @@ bool AVRCharacter::TeleportTo(const FVector& DestLocation, const FRotator& DestR
 
 	if (bTeleportSucceeded)
 	{
-		if (GetNetMode() != ENetMode::NM_Client)
-		{
-			NotifyOfTeleport();
-		}
-
-		if (LeftMotionController)
-			LeftMotionController->bIsPostTeleport = true;
-
-		if (RightMotionController)
-			RightMotionController->bIsPostTeleport = true;
+		NotifyOfTeleport();
 	}
 
 	return bTeleportSucceeded;

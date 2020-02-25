@@ -30,6 +30,18 @@ namespace VRPhysicsReplicationStatics
 FPhysicsReplicationVR::FPhysicsReplicationVR(FPhysScene* PhysScene) : FPhysicsReplication(PhysScene)
 {
 	VRPhysicsReplicationStatics::bHasVRPhysicsReplication = true;
+
+#if WITH_PHYSX
+	const UVRGlobalSettings& VRSettings = *GetDefault<UVRGlobalSettings>();
+	if (VRSettings.MaxCCDPasses != 1)
+	{
+		if (PxScene * PScene = PhysScene->GetPxScene())
+		{
+			PScene->setCCDMaxPasses(VRSettings.MaxCCDPasses);
+		}
+	}
+
+#endif
 }
 
 // Functions

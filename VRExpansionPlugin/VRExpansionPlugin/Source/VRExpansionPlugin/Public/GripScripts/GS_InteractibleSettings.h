@@ -89,7 +89,7 @@ public:
 };
 
 // A Grip script that overrides the default grip behavior and adds custom clamping logic instead,
-UCLASS(NotBlueprintable, ClassGroup = (VRExpansionPlugin))
+UCLASS(NotBlueprintable, ClassGroup = (VRExpansionPlugin), hideCategories = TickSettings)
 class VREXPANSIONPLUGIN_API UGS_InteractibleSettings : public UVRGripScriptBase
 {
 	GENERATED_BODY()

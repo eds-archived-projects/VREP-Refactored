@@ -23,6 +23,4 @@ void FBPActorGripInformation::ClearNonReppingItems()
 
 	// Clear out the secondary grip
 	SecondaryGripInfo.ClearNonReppingItems();
-
-	AdvancedGripSettings.SecondaryGripSettings.ClearNonReppedItems();
 }

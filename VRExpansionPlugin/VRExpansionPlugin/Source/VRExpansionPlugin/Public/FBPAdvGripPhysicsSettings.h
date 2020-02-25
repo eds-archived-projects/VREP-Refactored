@@ -4,8 +4,8 @@
 
 // Unreal
 #include "CoreMinimal.h"
-#include "UObject/ObjectMacros.h"
 #include "UObject/Class.h"
+#include "UObject/ObjectMacros.h"
 
 // UHeader Tool
 #include "FBPAdvGripPhysicsSettings.generated.h"
@@ -48,8 +48,11 @@ public:
 		bUsePhysicsSettings        (false                                             ),
 		PhysicsConstraintType      (EPhysicsGripConstraintType::AccelerationConstraint),
 		PhysicsGripLocationSettings(EPhysicsGripCOMType       ::COM_Default           ),
+		bSkipSettingSimulating     (false                                             ),
 		bTurnOffGravityDuringGrip  (false                                             ),
 		bUseCustomAngularValues    (false                                             ),
+		LinearMaxForceCoefficient  (0.f                                               ),
+		AngularMaxForceCoefficient (0.f                                               ),
 		AngularStiffness           (0.0f                                              ),
 		AngularDamping             (0.0f                                              )
 	{}
@@ -59,34 +62,34 @@ public:
 
 	FORCEINLINE bool operator==(const FBPAdvGripPhysicsSettings &Other) const
 	{
-		return 
-		(
-			bUsePhysicsSettings         == Other.bUsePhysicsSettings         &&
+		return (bUsePhysicsSettings == Other.bUsePhysicsSettings &&
 			PhysicsGripLocationSettings == Other.PhysicsGripLocationSettings &&
-			bTurnOffGravityDuringGrip   == Other.bTurnOffGravityDuringGrip   &&
-			bUseCustomAngularValues     == Other.bUseCustomAngularValues     &&
-
+			bTurnOffGravityDuringGrip == Other.bTurnOffGravityDuringGrip &&
+			bSkipSettingSimulating == Other.bSkipSettingSimulating &&
+			bUseCustomAngularValues == Other.bUseCustomAngularValues &&
+			PhysicsConstraintType == Other.PhysicsConstraintType &&
+			FMath::IsNearlyEqual(LinearMaxForceCoefficient, Other.LinearMaxForceCoefficient) &&
+			FMath::IsNearlyEqual(AngularMaxForceCoefficient, Other.AngularMaxForceCoefficient) &&
 			FMath::IsNearlyEqual(AngularStiffness, Other.AngularStiffness) &&
-			FMath::IsNearlyEqual(AngularDamping  , Other.AngularDamping  ) &&
-
-			PhysicsConstraintType       == Other.PhysicsConstraintType
-		);
+			FMath::IsNearlyEqual(AngularDamping, Other.AngularDamping) //&&
+			//FMath::IsNearlyEqual(MaxForce, Other.MaxForce)
+			);
 	}
 
 	FORCEINLINE bool operator!=(const FBPAdvGripPhysicsSettings &Other) const
 	{
-		return 
-		(
-			bUsePhysicsSettings         != Other.bUsePhysicsSettings         ||
+		return (bUsePhysicsSettings != Other.bUsePhysicsSettings ||
 			PhysicsGripLocationSettings != Other.PhysicsGripLocationSettings ||
-			bTurnOffGravityDuringGrip   != Other.bTurnOffGravityDuringGrip   ||
-			bUseCustomAngularValues     != Other.bUseCustomAngularValues     ||
-
+			bTurnOffGravityDuringGrip != Other.bTurnOffGravityDuringGrip ||
+			bSkipSettingSimulating != Other.bSkipSettingSimulating ||
+			bUseCustomAngularValues != Other.bUseCustomAngularValues ||
+			PhysicsConstraintType != Other.PhysicsConstraintType ||
+			!FMath::IsNearlyEqual(LinearMaxForceCoefficient, Other.LinearMaxForceCoefficient) ||
+			!FMath::IsNearlyEqual(AngularMaxForceCoefficient, Other.AngularMaxForceCoefficient) ||
 			!FMath::IsNearlyEqual(AngularStiffness, Other.AngularStiffness) ||
-			!FMath::IsNearlyEqual(AngularDamping  , Other.AngularDamping  ) ||
-
-			PhysicsConstraintType       != Other.PhysicsConstraintType
-		);
+			!FMath::IsNearlyEqual(AngularDamping, Other.AngularDamping) //||
+			//!FMath::IsNearlyEqual(MaxForce, Other.MaxForce)
+			);
 	}
 
 	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
@@ -94,15 +97,27 @@ public:
 
 	// Declares
 
+	// Don't automatically (un)simulate the component/root on grip/drop, let the end user set it up instead
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings") bool bUsePhysicsSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings")) EPhysicsGripConstraintType PhysicsConstraintType      ;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings")) EPhysicsGripCOMType        PhysicsGripLocationSettings;   // Set how the grips handle center of mass
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings")) bool                       bTurnOffGravityDuringGrip  ;   // Turn off gravity during the grip, resolves the slight downward offset of the object with normal constraint strengths.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings")) bool                       bUseCustomAngularValues    ;   // Use the custom angular values on this grip
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings")) bool                       bSkipSettingSimulating     ;  	// Don't automatically (un)simulate the component/root on grip/drop, let the end user set it up instead
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUseCustomAngularValues", ClampMin = "0.000", UIMin = "0.000")) float AngularStiffness;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUseCustomAngularValues", ClampMin = "0.000", UIMin = "0.000")) float AngularDamping  ;
+
+	// A multiplier to add to the stiffness of a grip that is then set as the MaxForce of the grip
+	// It is clamped between 0.00 and 256.00 to save in replication cost, a value of 0 will mean max force is infinite as it will multiply it to zero (legacy behavior)
+	// If you want an exact value you can figure it out as a factor of the stiffness, also Max force can be directly edited with SetAdvancedConstraintSettings
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings"), meta = (ClampMin = "0.00", UIMin = "0.00", ClampMax = "256.00", UIMax = "32.00")) float LinearMaxForceCoefficient;
+
+	// A multiplier to add to the stiffness of a grip that is then set as the MaxForce of the grip
+	// It is clamped between 0.00 and 256.00 to save in replication cost, a value of 0 will mean max force is infinite as it will multiply it to zero (legacy behavior)
+	// If you want an exact value you can figure it out as a factor of the stiffness, also Max force can be directly edited with SetAdvancedConstraintSettings
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsSettings", meta = (editcondition = "bUsePhysicsSettings"), meta = (ClampMin = "0.00", UIMin = "0.00", ClampMax = "256.00", UIMax = "32.00")) float AngularMaxForceCoefficient;
 };
 
 template<>

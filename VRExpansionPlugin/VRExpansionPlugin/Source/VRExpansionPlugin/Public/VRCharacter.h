@@ -50,8 +50,6 @@ public:
 	*/
 	virtual FVector GetTeleportLocation(FVector OriginalLocation) override;
 
-	virtual void NotifyOfTeleport_Implementation() override;
-
 	// Regenerates the base offsetcomponenttoworld that VR uses
 	virtual void RegenerateOffsetComponentToWorld(bool bUpdateBounds, bool bCalculatePureYaw) override;
 	virtual void SetCharacterHalfHeightVR(float HalfHeight, bool bUpdateOverlaps = true) override;

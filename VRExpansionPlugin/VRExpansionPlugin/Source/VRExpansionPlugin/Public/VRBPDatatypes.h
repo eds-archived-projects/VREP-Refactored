@@ -22,7 +22,6 @@
 #include "FBasicLowPassFilter.h"
 #include "FBPEuroLowPassFilter.h"
 #include "FBPAdvGripPhysicsSettings.h"
-#include "FBPAdvSecondaryGripSettings.h"
 #include "FBPAdvGripSettings.h"
 #include "FBPSecondaryGripInfo.h"
 #include "FBPActorGripInformation.h"
@@ -251,7 +250,8 @@ struct TStructOpsTypeTraits< FBPVRComponentPosRep > : public TStructOpsTypeTrait
 {
 	enum
 	{
-		WithNetSerializer = true
+		WithNetSerializer = true ,
+		WithNetSharedSerialization = true,
 	};
 };
 
@@ -341,6 +341,10 @@ public:
 		return ((GripID != INVALID_VRGRIP_ID) && (GripID == Other.GripID));
 	}
 
+	FORCEINLINE bool operator==(const uint8 & Other) const
+	{
+		return ((GripID != INVALID_VRGRIP_ID) && (GripID == Other));
+	}
 
 	// Declares
 
@@ -391,8 +395,8 @@ public:
 		Stiffness = 0.f;
 		Damping = 0.f;
 		MaxForce = MAX_FLT;
-		bEnablePositionDrive = true;
-		bEnableVelocityDrive = true;
+		bEnablePositionDrive = false;
+		bEnableVelocityDrive = false;
 	}
 
 	void FillFrom(FConstraintDrive& ConstraintDrive)
@@ -433,10 +437,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Linear Constraint Settings")
 		FBPAdvancedPhysicsHandleAxisSettings ZAxisSettings;
 
-	// The settings for the Orientation (Slerp only for now)
+	// The settings for the Orientation 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Angular Constraint Settings")
 		FBPAdvancedPhysicsHandleAxisSettings SlerpSettings;
 
+	// The settings for the Orientation 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Angular Constraint Settings")
+		FBPAdvancedPhysicsHandleAxisSettings TwistSettings;
+
+	// The settings for the Orientation
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Angular Constraint Settings")
+		FBPAdvancedPhysicsHandleAxisSettings SwingSettings;
 
 	// FConstraintSettings // settings for various things like distance limits
 	// Add a deletegate bindable in the motion controller
@@ -451,6 +462,8 @@ public:
 		ZAxisSettings.FillFrom(HandleInfo->LinConstraint.ZDrive);
 
 		SlerpSettings.FillFrom(HandleInfo->AngConstraint.SlerpDrive);
+		TwistSettings.FillFrom(HandleInfo->AngConstraint.TwistDrive);
+		SwingSettings.FillFrom(HandleInfo->AngConstraint.SwingDrive);
 
 		return true;
 	}
@@ -464,7 +477,17 @@ public:
 		YAxisSettings.FillTo(HandleInfo->LinConstraint.YDrive);
 		ZAxisSettings.FillTo(HandleInfo->LinConstraint.ZDrive);
 
-		SlerpSettings.FillTo(HandleInfo->AngConstraint.SlerpDrive);
+		if ((SlerpSettings.bEnablePositionDrive || SlerpSettings.bEnableVelocityDrive))
+		{
+			HandleInfo->AngConstraint.AngularDriveMode = EAngularDriveMode::SLERP;
+			SlerpSettings.FillTo(HandleInfo->AngConstraint.SlerpDrive);
+		}
+		else
+		{
+			HandleInfo->AngConstraint.AngularDriveMode = EAngularDriveMode::TwistAndSwing;
+			TwistSettings.FillTo(HandleInfo->AngConstraint.TwistDrive);
+			SwingSettings.FillTo(HandleInfo->AngConstraint.SwingDrive);
+		}
 
 		return true;
 	}

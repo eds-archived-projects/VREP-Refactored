@@ -305,8 +305,8 @@ void UGrippableCapsuleComponent::OnChildGripRelease_Implementation(UGripMotionCo
 void UGrippableCapsuleComponent::OnGrip_Implementation       (UGripMotionControllerComponent* GrippingController , const FBPActorGripInformation& GripInformation                   ) {}
 void UGrippableCapsuleComponent::OnGripRelease_Implementation(UGripMotionControllerComponent* ReleasingController, const FBPActorGripInformation& GripInformation, bool bWasSocketed) {}
 
-void UGrippableCapsuleComponent::OnSecondaryGrip_Implementation       (USceneComponent* SecondaryGripComponent         , const FBPActorGripInformation& GripInformation) {}
-void UGrippableCapsuleComponent::OnSecondaryGripRelease_Implementation(USceneComponent* ReleasingSecondaryGripComponent, const FBPActorGripInformation& GripInformation) {}
+void UGrippableCapsuleComponent::OnSecondaryGrip_Implementation(UGripMotionControllerComponent * GripOwningController, USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UGrippableCapsuleComponent::OnSecondaryGripRelease_Implementation(UGripMotionControllerComponent * GripOwningController, USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
 
 bool UGrippableCapsuleComponent::RequestsSocketing_Implementation(USceneComponent*&              ParentToSocketTo   ,       FName&                   OptionalSocketName, FTransform_NetQuantize& RelativeTransform) { return false; }
 void UGrippableCapsuleComponent::TickGrip_Implementation         (UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation   , float DeltaTime                          ) {}

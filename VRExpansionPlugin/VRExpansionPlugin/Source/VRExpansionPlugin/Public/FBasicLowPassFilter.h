@@ -20,7 +20,7 @@ public:
 	{}
 
 
-	// Functins
+	// Functions
 
 	/** Calculate */
 	FVector Filter(const FVector& InValue, const FVector& InAlpha)
@@ -31,7 +31,9 @@ public:
 		{
 			for (int componentIndex = 0; componentIndex < 3; componentIndex++)
 			{
-				Result[componentIndex] = InAlpha[componentIndex] * InValue[componentIndex] + (1 - InAlpha[componentIndex]) * Previous[componentIndex];
+				Result[componentIndex] = InAlpha [componentIndex]                                 * 
+										 InValue [componentIndex] + (1 - InAlpha[componentIndex]) * 
+										 Previous[componentIndex]                                  ;
 			}
 		}
 

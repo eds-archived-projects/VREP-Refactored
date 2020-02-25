@@ -12,7 +12,6 @@
 
 
 
-
 USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
 struct VREXPANSIONPLUGIN_API FBPAdvSecondaryGripSettings
 {

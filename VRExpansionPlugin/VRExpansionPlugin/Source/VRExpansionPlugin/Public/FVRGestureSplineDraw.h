@@ -6,7 +6,6 @@
 #include "Components/SplineMeshComponent.h"
 #include "UObject/ObjectMacros.h"
 
-
 // UHeader Tool
 #include "FVRGestureSplineDraw.generated.h"
 

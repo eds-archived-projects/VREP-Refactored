@@ -5,6 +5,7 @@
 // Unreal
 #include "CoreMinimal.h"
 #include "Components/ShapeComponent.h"
+#include "GameFramework/PhysicsVolume.h"
 
 // VREP
 #include "VRTrackedParentInterface.h"
@@ -55,6 +56,32 @@ public:
 
 	// Functions
 
+	inline bool AreWeOverlappingVolume(APhysicsVolume* V)
+	{
+		bool bInsideVolume = true;
+		if (!V->bPhysicsOnContact)
+		{
+			FVector ClosestPoint(0.f);
+			// If there is no primitive component as root we consider you inside the volume. This is odd, but the behavior 
+			// has existed for a long time, so keeping it this way
+			UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(V->GetRootComponent());
+			if (RootPrimitive)
+			{
+				float DistToCollisionSqr = -1.f;
+				if (RootPrimitive->GetSquaredDistanceToCollision(OffsetComponentToWorld.GetTranslation(), DistToCollisionSqr, ClosestPoint))
+				{
+					bInsideVolume = (DistToCollisionSqr == 0.f);
+				}
+				else
+				{
+					bInsideVolume = false;
+				}
+			}
+		}
+
+		return bInsideVolume;
+	}
+	
 	FORCEINLINE void GenerateOffsetToWorld(bool bUpdateBounds = true, bool bGetPureYaw = true);
 
 	inline void OnUpdateTransform_Public(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport = ETeleportType::None)
@@ -81,6 +108,8 @@ public:
 	*/
 	UFUNCTION(BlueprintCallable, Category = "Components|Capsule")
 	virtual void SetCapsuleSizeVR(float NewRadius, float NewHalfHeight, bool bUpdateOverlaps = true);
+
+	virtual void UpdatePhysicsVolume(bool bTriggerNotifiers) override;
 
 	// UCapsuleComponent Overloads
 

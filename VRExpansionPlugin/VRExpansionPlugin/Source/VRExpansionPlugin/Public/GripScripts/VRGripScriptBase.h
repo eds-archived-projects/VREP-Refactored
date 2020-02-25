@@ -56,10 +56,16 @@ public:
 	EGSTransformOverrideType GetWorldTransformOverrideType();
 
 	// Returns if the script wants auto drop to be ignored
-	bool Wants_DenyAutoDrop();
+	FORCEINLINE bool Wants_DenyAutoDrop()
+	{
+		return bDenyAutoDrop;
+	}
 
 	// Returns if the script wants to force a drop
-	bool Wants_ToForceDrop();
+	FORCEINLINE bool Wants_ToForceDrop()
+	{
+		return bForceDrop;
+	}
 
 	// Flags the grip to be dropped as soon as possible
 	UFUNCTION(BlueprintCallable, Category = "VRGripScript")
@@ -69,7 +75,10 @@ public:
 	}
 
 	// Returns if the script wants to deny late updates
-	bool Wants_DenyLateUpdates();
+	FORCEINLINE bool Wants_DenyLateUpdates()
+	{
+		return bDenyLateUpdates;
+	}
 
 	// Returns if the script is currently active and should be used
 	/*UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "VRGripScript")
@@ -87,7 +96,7 @@ public:
 	// FTickableGameObject functions
 
 	// Set whether the grip script can tick or not
-	UFUNCTION(BlueprintCallable, Category = "Tick Settings")
+	UFUNCTION(BlueprintCallable, Category = "TickSettings")
 		void SetTickEnabled(bool bTickEnabled);
 
 	/**
@@ -103,6 +112,7 @@ public:
 	virtual bool IsTickableWhenPaused() const override;
 	virtual ETickableTickType GetTickableTickType() const;
 	virtual TStatId GetStatId() const override;
+	virtual UWorld* GetWorld() const override;
 
 	// End tickable object information
 
@@ -200,12 +210,37 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "DefaultSettings")
 		bool bDenyLateUpdates;
 
+
+	// Returns if the script wants auto drop to be ignored
+	FORCEINLINE bool InjectPrePhysicsHandle()
+	{
+		return bInjectPrePhysicsHandle;
+	}
+
+	// Returns if we want to deny auto dropping
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "DefaultSettings")
+		bool bInjectPrePhysicsHandle;
+
+	virtual void HandlePrePhysicsHandle(FBPActorPhysicsHandleInformation * HandleInfo, FTransform & KinPose);
+
+	// Returns if the script wants auto drop to be ignored
+	FORCEINLINE bool InjectPostPhysicsHandle()
+	{
+		return bInjectPostPhysicsHandle;
+	}
+
+	// Returns if we want to deny auto dropping
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "DefaultSettings")
+		bool bInjectPostPhysicsHandle;
+
+	virtual void HandlePostPhysicsHandle(FBPActorPhysicsHandleInformation * HandleInfo);
+
 	// If true then this scrip can tick when bAllowticking is true
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "Tick Settings")
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "TickSettings")
 		bool bCanEverTick;
 
 	// If true and we bCanEverTick, then will fire off the tick function
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Tick Settings")
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "TickSettings")
 		bool bAllowTicking;
 };
 

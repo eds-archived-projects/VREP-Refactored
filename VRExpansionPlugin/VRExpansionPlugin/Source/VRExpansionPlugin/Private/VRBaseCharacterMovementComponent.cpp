@@ -43,6 +43,7 @@ UVRBaseCharacterMovementComponent::UVRBaseCharacterMovementComponent(const FObje
 
 	AdditionalVRInputVector = FVector::ZeroVector;	
 	CustomVRInputVector = FVector::ZeroVector;
+	TrackingLossThreshold = 6000.f;
 	bApplyAdditionalVRInputVectorAsNegative = true;
 	VRClimbingStepHeight = 96.0f;
 	VRClimbingEdgeRejectDistance = 5.0f;
@@ -73,6 +74,8 @@ UVRBaseCharacterMovementComponent::UVRBaseCharacterMovementComponent(const FObje
 
 	// Allow merging dual movements, generally this is wanted for the perf increase
 	bEnableServerDualMoveScopedMovementUpdates = true;
+
+	bNotifyTeleported = false;
 }
 
 FVRCharacterScopedMovementUpdate::FVRCharacterScopedMovementUpdate(USceneComponent* Component, EScopedUpdate::Type ScopeBehavior, bool bRequireOverlapsEventFlagToQueueOverlaps)
@@ -155,6 +158,21 @@ bool UVRBaseCharacterMovementComponent::CheckForMoveAction()
 	}
 
 	return true;
+}
+
+void UVRBaseCharacterMovementComponent::CheckServerAuthedMoveAction()
+{
+	// If we are calling this on the server on a non owned character, there is no reason to wait around, just do the action now
+	// If we ARE locally controlled, keep the action inline with the movement component to maintain consistency
+	if (GetNetMode() < NM_Client)
+	{
+		ACharacter* OwningChar = GetCharacterOwner();
+		if (OwningChar && !OwningChar->IsLocallyControlled())
+		{
+			CheckForMoveAction();
+			MoveActionArray.Clear();
+		}
+	}
 }
 
 void FSavedMove_VRBaseCharacter::Clear()
@@ -356,7 +374,14 @@ bool UVRBaseCharacterMovementComponent::DoMASnapTurn(FVRMoveActionContainer& Mov
 {
 	if (AVRBaseCharacter * OwningCharacter = Cast<AVRBaseCharacter>(GetCharacterOwner()))
 	{
-		OwningCharacter->SetActorRotationVR(MoveAction.MoveActionRot, true, false);
+		FRotator TargetRot(0.f, MoveAction.MoveActionRot.Yaw, 0.f);
+		OwningCharacter->SetActorRotationVR(TargetRot, true, false);
+
+		// If we are flagged to teleport the grips
+		if (MoveAction.MoveActionRot.Roll > 0.0f)
+		{
+			OwningCharacter->NotifyOfTeleport();
+		}
 	}
 
 	return false;
@@ -366,7 +391,14 @@ bool UVRBaseCharacterMovementComponent::DoMASetRotation(FVRMoveActionContainer& 
 {
 	if (AVRBaseCharacter * OwningCharacter = Cast<AVRBaseCharacter>(GetCharacterOwner()))
 	{
-		OwningCharacter->SetActorRotationVR(MoveAction.MoveActionRot, true);
+		FRotator TargetRot(0.f, MoveAction.MoveActionRot.Yaw, 0.f);
+		OwningCharacter->SetActorRotationVR(TargetRot, true);
+
+		// If we are flagged to teleport the grips
+		if (MoveAction.MoveActionRot.Roll > 0.0f)
+		{
+			OwningCharacter->NotifyOfTeleport();
+		}
 	}
 
 	return false;
@@ -395,7 +427,9 @@ bool UVRBaseCharacterMovementComponent::DoMATeleport(FVRMoveActionContainer& Mov
 			return false;
 		}
 
-		OwningCharacter->TeleportTo(MoveAction.MoveActionLoc, MoveAction.MoveActionRot, false, MoveAction.MoveActionRot.Pitch > 0.0f);
+		bool bSkipEncroachmentCheck = MoveAction.MoveActionRot.Pitch > 0.0f;
+		FRotator TargetRot(0.f, MoveAction.MoveActionRot.Yaw, 0.f);
+		OwningCharacter->TeleportTo(MoveAction.MoveActionLoc, TargetRot, false, bSkipEncroachmentCheck);
 
 		if (OwningCharacter->bUseControllerRotationYaw)
 			OwningController->SetControlRotation(MoveAction.MoveActionRot);
@@ -405,6 +439,7 @@ bool UVRBaseCharacterMovementComponent::DoMATeleport(FVRMoveActionContainer& Mov
 
 	return false;
 }
+
 
 void UVRBaseCharacterMovementComponent::EndPushBackNotification()
 {
@@ -504,21 +539,26 @@ void UVRBaseCharacterMovementComponent::PerformMovement(float DeltaSeconds)
 	}
 }
 
-void UVRBaseCharacterMovementComponent::PerformMoveAction_SnapTurn(float DeltaYawAngle)
+void UVRBaseCharacterMovementComponent::PerformMoveAction_SnapTurn(float DeltaYawAngle, bool bFlagGripTeleport)
 {
 	FVRMoveActionContainer MoveAction;
 	MoveAction.MoveAction = EVRMoveAction::VRMOVEACTION_SnapTurn;
-
 	MoveAction.MoveActionRot = FRotator(0.0f, FMath::RoundToFloat(((FRotator(0.f, DeltaYawAngle, 0.f).Quaternion() * UpdatedComponent->GetComponentQuat()).Rotator().Yaw) * 100.f) / 100.f, 0.0f);
+	MoveAction.MoveActionRot.Roll = bFlagGripTeleport ? 1.0f : 0.0f;
 	MoveActionArray.MoveActions.Add(MoveAction);
+
+	CheckServerAuthedMoveAction();
 }
 
-void UVRBaseCharacterMovementComponent::PerformMoveAction_SetRotation(float NewYaw)
+void UVRBaseCharacterMovementComponent::PerformMoveAction_SetRotation(float NewYaw, bool bFlagGripTeleport)
 {
 	FVRMoveActionContainer MoveAction;
 	MoveAction.MoveAction = EVRMoveAction::VRMOVEACTION_SetRotation;
 	MoveAction.MoveActionRot = FRotator(0.0f, FMath::RoundToFloat(NewYaw * 100.f) / 100.f, 0.0f);
+	MoveAction.MoveActionRot.Roll = bFlagGripTeleport ? 1.0f : 0.0f;
 	MoveActionArray.MoveActions.Add(MoveAction);
+
+	CheckServerAuthedMoveAction();
 }
 
 void UVRBaseCharacterMovementComponent::PerformMoveAction_Teleport(FVector TeleportLocation, FRotator TeleportRotation, bool bSkipEncroachmentCheck)
@@ -529,6 +569,8 @@ void UVRBaseCharacterMovementComponent::PerformMoveAction_Teleport(FVector Telep
 	MoveAction.MoveActionRot.Yaw = FMath::RoundToFloat(TeleportRotation.Yaw * 100.f) / 100.f;
 	MoveAction.MoveActionRot.Pitch = bSkipEncroachmentCheck ? 1.0f : 0.0f;
 	MoveActionArray.MoveActions.Add(MoveAction);
+
+	CheckServerAuthedMoveAction();
 }
 
 void UVRBaseCharacterMovementComponent::PerformMoveAction_StopAllMovement()
@@ -536,6 +578,8 @@ void UVRBaseCharacterMovementComponent::PerformMoveAction_StopAllMovement()
 	FVRMoveActionContainer MoveAction;
 	MoveAction.MoveAction = EVRMoveAction::VRMOVEACTION_StopAllMovement;
 	MoveActionArray.MoveActions.Add(MoveAction);
+
+	CheckServerAuthedMoveAction();
 }
 
 void UVRBaseCharacterMovementComponent::PerformMoveAction_Custom(EVRMoveAction MoveActionToPerform, EVRMoveActionDataReq DataRequirementsForMoveAction, FVector MoveActionVector, FRotator MoveActionRotator)
@@ -548,6 +592,8 @@ void UVRBaseCharacterMovementComponent::PerformMoveAction_Custom(EVRMoveAction M
 	MoveAction.MoveActionRot = MoveActionRotator;
 	MoveAction.MoveActionDataReq = DataRequirementsForMoveAction;
 	MoveActionArray.MoveActions.Add(MoveAction);
+
+	CheckServerAuthedMoveAction();
 }
 
 void UVRBaseCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
@@ -1386,6 +1432,15 @@ void UVRBaseCharacterMovementComponent::TickComponent(float DeltaTime, enum ELev
 	// Make sure these are cleaned out for the next frame
 	AdditionalVRInputVector = FVector::ZeroVector;
 	CustomVRInputVector = FVector::ZeroVector;
+
+	if (bNotifyTeleported)
+	{
+		if (AVRBaseCharacter * BaseChar = Cast<AVRBaseCharacter>(CharacterOwner))
+		{
+			BaseChar->OnCharacterTeleported_Bind.Broadcast();
+			bNotifyTeleported = false;
+		}
+	}
 }
 
 void UVRBaseCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)

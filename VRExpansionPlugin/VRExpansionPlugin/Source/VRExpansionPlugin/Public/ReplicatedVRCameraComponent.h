@@ -21,7 +21,7 @@ class AVRBaseCharacter;
 
 
 /**
-* An overridden camera component that replicates its location in multiplayer
+* An overridden camera component that replicates its location in multiplayer.
 */
 UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent), ClassGroup = VRExpansionLibrary)
 class VREXPANSIONPLUGIN_API UReplicatedVRCameraComponent : public UCameraComponent
@@ -32,7 +32,7 @@ public:
 
 	// Aliases
 
-	// I made this a using statemnt -Ed.
+	// I made this a using statement -Ed.
 	//typedef void (AVRBaseCharacter::*VRBaseCharTransformRPC_Pointer)(FBPVRComponentPosRep NewTransform);
 
 	// Pointer to an override to call from the owning character - this saves 7 bits a rep avoiding component IDs on the RPC

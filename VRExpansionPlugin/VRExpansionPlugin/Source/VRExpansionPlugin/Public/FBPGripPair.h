@@ -43,17 +43,17 @@ public:
 
 	// Functions
 
-	FORCEINLINE bool operator==(const FBPGripPair & Other) const
+	FORCEINLINE bool operator==(const FBPGripPair& Other) const
 	{
 		return (Other.HoldingController == HoldingController && ((GripID != INVALID_VRGRIP_ID) && (GripID == Other.GripID)));
 	}
 
-	FORCEINLINE bool operator==(const UGripMotionControllerComponent * Other) const
+	FORCEINLINE bool operator==(const UGripMotionControllerComponent* Other) const
 	{
 		return (Other == HoldingController);
 	}
 
-	FORCEINLINE bool operator==(const uint8 & Other) const
+	FORCEINLINE bool operator==(const uint8& Other) const
 	{
 		return GripID == Other;
 	}

@@ -526,6 +526,9 @@ public:
 
 	// Declares
 
+	// How many passes CCD will take during simulation, larger values significantly increase the cost of CCD calculation but also prevent tunneling artifacts
+	UPROPERTY(config, EditAnywhere, Category = "Physics") int MaxCCDPasses;
+
 	UPROPERTY(config, EditAnywhere, Category = "GunSettings") FBPVirtualStockSettings VirtualStockSettings;
 	
 	UPROPERTY(config, EditAnywhere, Category = "GunSettings|Secondary Grip 1Euro Settings") float OneEuroMinCutoff  ;   // Setting to use for the OneEuro smoothing low pass filter when double gripping something held with a hand.

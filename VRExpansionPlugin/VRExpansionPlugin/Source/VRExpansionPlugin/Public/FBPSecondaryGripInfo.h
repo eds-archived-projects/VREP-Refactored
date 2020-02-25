@@ -37,11 +37,12 @@ USTRUCT(BlueprintType, Category = "VRExpansionLibrary")
 struct VREXPANSIONPLUGIN_API FBPSecondaryGripInfo
 {
 	GENERATED_BODY()
+
 public:
 
 	// Constructors
 
-	FBPSecondaryGripInfo():
+	FBPSecondaryGripInfo() :
 		bHasSecondaryAttachment   (false                     ),
 		SecondaryAttachment       (nullptr                   ),
 		SecondaryGripDistance     (0.0f                      ),
@@ -93,10 +94,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "SecondaryGripInfo") 
 		bool bIsSlotGrip;
 
-  UPROPERTY(BlueprintReadOnly, Category = "SecondaryGripInfo") 
+	UPROPERTY(BlueprintReadOnly, Category = "SecondaryGripInfo") 
 	   FTransform_NetQuantize SecondaryRelativeTransform;
 	
-	UPROPERTY() float                  LerpToRate                ;    //Lerp transitions. Max value is 16 seconds with two decimal precision, this is to reduce replication overhead.
+	UPROPERTY() float LerpToRate;   //Lerp transitions. Max value is 16 seconds with two decimal precision, this is to reduce replication overhead.
 
 	EGripLerpState GripLerpState       ;   // These are not replicated, they don't need to be
 	float          curLerp             ;

@@ -38,7 +38,7 @@ public:
 	void ResetSmoothingFilter();
 
 	/** Smooth vector */
-	FVector RunFilterSmoothing(const FVector &InRawValue, const float &InDeltaTime);
+	FVector RunFilterSmoothing(const FVector& InRawValue, const float& InDeltaTime);
 
 
 	// Declares

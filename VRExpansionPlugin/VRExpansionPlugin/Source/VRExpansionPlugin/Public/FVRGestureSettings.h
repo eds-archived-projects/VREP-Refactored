@@ -22,7 +22,6 @@ enum class EVRGestureMirrorMode : uint8
 
 
 
-
 USTRUCT(BlueprintType, Category = "VRGestures")
 struct VREXPANSIONPLUGIN_API FVRGestureSettings
 {
@@ -63,8 +62,10 @@ public:
 	// Full threshold before detecting the gesture, raise this to lower accuracy but make it easier to detect this gesture.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRGesture|Advanced") float FullThreshold;
 
-	// If set to left/right, will mirror the detected gesture if the gesture component is set to match that value.
-	// If set to Both mode, the gesture will be checked both normal and mirrored and the best match will be chosen.
+	/*
+	If set to left/right, will mirror the detected gesture if the gesture component is set to match that value.
+	If set to Both mode, the gesture will be checked both normal and mirrored and the best match will be chosen.
+	*/
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "VRGesture|Advanced") EVRGestureMirrorMode MirrorMode;
 
 	// If enabled this gesture will be checked when inside a DB

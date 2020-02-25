@@ -6,7 +6,7 @@
 =============================================================================*/
 
 // Parent Header
-#include "VRCharacter.h"
+#include "VRCharacterMovementComponent.h"
 
 // Unreal
 #include "DrawDebugHelpers.h"
@@ -27,7 +27,6 @@
 // VREP
 //#include "PhysicsEngine/DestructibleActor.h"
 #include "VRCharacter.h"
-#include "VRCharacterMovementComponent.h"
 #include "VRExpansionFunctionLibrary.h"
 
 // @todo this is here only due to circular dependency to AIModule. To be removed

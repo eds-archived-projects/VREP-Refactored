@@ -8,8 +8,6 @@
 
 // IWVR
 #include "FBPAdvGripPhysicsSettings.h"
-#include "FBPAdvSecondaryGripSettings.h"
-
 
 // UHeader Tool
 #include "FBPAdvGripSettings.generated.h"
@@ -47,5 +45,4 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AdvancedGripSettings") uint8                       GripPriority         ;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AdvancedGripSettings") bool                        bSetOwnerOnGrip      ;   // If true, will set the owner of actor grips on grip
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AdvancedGripSettings") FBPAdvGripPhysicsSettings   PhysicsSettings      ;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AdvancedGripSettings") FBPAdvSecondaryGripSettings SecondaryGripSettings;
 };

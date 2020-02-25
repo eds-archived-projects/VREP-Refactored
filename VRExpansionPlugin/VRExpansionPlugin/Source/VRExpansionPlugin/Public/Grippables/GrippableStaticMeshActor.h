@@ -26,7 +26,7 @@
 * A component specifically for being able to turn off movement replication in the component at will
 * Has the upside of also being a blueprintable base since UE4 doesn't allow that with std ones
 */
-UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent), ClassGroup = (VRExpansionPlugin))
+UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent, ChildCanTick), ClassGroup = (VRExpansionPlugin))
 class VREXPANSIONPLUGIN_API UOptionalRepStaticMeshComponent : public UStaticMeshComponent
 {
 	GENERATED_BODY()
@@ -45,7 +45,7 @@ public:
 /**
 *
 */
-UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent), ClassGroup = (VRExpansionPlugin))
+UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent, ChildCanTick), ClassGroup = (VRExpansionPlugin))
 class VREXPANSIONPLUGIN_API AGrippableStaticMeshActor : public AStaticMeshActor, public IVRGripInterface, public IGameplayTagAssetInterface
 {
 	GENERATED_BODY()
@@ -248,11 +248,11 @@ public:
 
 	// Event triggered on the interfaced object when secondary gripped
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void OnSecondaryGrip(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation);
+		void OnSecondaryGrip(UGripMotionControllerComponent * GripOwningController, USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation);
 
 	// Event triggered on the interfaced object when secondary grip is released
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void OnSecondaryGripRelease(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation);
+		void OnSecondaryGripRelease(UGripMotionControllerComponent * GripOwningController, USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation);
 
 	// Event triggered each tick on the interfaced object when gripped, can be used for custom movement or grip based logic
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")

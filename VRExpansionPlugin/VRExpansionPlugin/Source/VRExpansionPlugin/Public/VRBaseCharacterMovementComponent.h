@@ -13,19 +13,20 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Navigation/PathFollowingComponent.h"
 
-
 // VREP
 #include "VRBPDatatypes.h"
 
-
 // UHeader Tool
 #include "VRBaseCharacterMovementComponent.generated.h"
+
+
 
 /** Delegate for notification when to handle a climbing step up, will override default step up logic if is bound to. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVROnPerformClimbingStepUp, FVector, FinalStepUpLocation);
 
 /** Shared pointer for easy memory management of FSavedMove_Character, for accumulating and replaying network moves. */
 //typedef TSharedPtr<class FSavedMove_Character> FSavedMovePtr;
+
 
 
 //=============================================================================
@@ -45,29 +46,29 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVROnPerformClimbingStepUp, FVector,
 UENUM(Blueprintable)
 enum class EVRMoveAction : uint8
 {
-	VRMOVEACTION_None = 0x00,
-	VRMOVEACTION_SnapTurn = 0x01,
-	VRMOVEACTION_Teleport = 0x02,
+	VRMOVEACTION_None            = 0x00,
+	VRMOVEACTION_SnapTurn        = 0x01,
+	VRMOVEACTION_Teleport        = 0x02,
 	VRMOVEACTION_StopAllMovement = 0x03,
-	VRMOVEACTION_SetRotation = 0x04,
-	VRMOVEACTION_CUSTOM1 = 0x05,
-	VRMOVEACTION_CUSTOM2 = 0x06,
-	VRMOVEACTION_CUSTOM3 = 0x07,
-	VRMOVEACTION_CUSTOM4 = 0x08,
-	VRMOVEACTION_CUSTOM5 = 0x09,
-	VRMOVEACTION_CUSTOM6 = 0x0A,
-	VRMOVEACTION_CUSTOM7 = 0x0B,
-	VRMOVEACTION_CUSTOM8 = 0x0C,
-	VRMOVEACTION_CUSTOM9 = 0x0D,
-	VRMOVEACTION_CUSTOM10 = 0x0E,
+	VRMOVEACTION_SetRotation     = 0x04,
+	VRMOVEACTION_CUSTOM1         = 0x05,
+	VRMOVEACTION_CUSTOM2         = 0x06,
+	VRMOVEACTION_CUSTOM3         = 0x07,
+	VRMOVEACTION_CUSTOM4         = 0x08,
+	VRMOVEACTION_CUSTOM5         = 0x09,
+	VRMOVEACTION_CUSTOM6         = 0x0A,
+	VRMOVEACTION_CUSTOM7         = 0x0B,
+	VRMOVEACTION_CUSTOM8         = 0x0C,
+	VRMOVEACTION_CUSTOM9         = 0x0D,
+	VRMOVEACTION_CUSTOM10        = 0x0E,
 };
 
 UENUM(Blueprintable)
 enum class EVRMoveActionDataReq : uint8
 {
-	VRMOVEACTIONDATA_None = 0x00,
-	VRMOVEACTIONDATA_LOC = 0x01,
-	VRMOVEACTIONDATA_ROT = 0x02,
+	VRMOVEACTIONDATA_None        = 0x00,
+	VRMOVEACTIONDATA_LOC         = 0x01,
+	VRMOVEACTIONDATA_ROT         = 0x02,
 	VRMOVEACTIONDATA_LOC_AND_ROT = 0x03
 };
 
@@ -75,7 +76,9 @@ USTRUCT()
 struct VREXPANSIONPLUGIN_API FVRMoveActionContainer
 {
 	GENERATED_USTRUCT_BODY()
+
 public:
+
 	// Constructor 
 
 	FVRMoveActionContainer()
@@ -83,14 +86,16 @@ public:
 		Clear();
 	}
 
+
 	// Functions
 	
 	void Clear()
 	{
-		MoveAction = EVRMoveAction::VRMOVEACTION_None;
+		MoveAction        = EVRMoveAction       ::VRMOVEACTION_None    ;
 		MoveActionDataReq = EVRMoveActionDataReq::VRMOVEACTIONDATA_None;
-		MoveActionLoc = FVector::ZeroVector;
-		MoveActionRot = FRotator::ZeroRotator;
+
+		MoveActionLoc     = FVector ::ZeroVector ;
+		MoveActionRot     = FRotator::ZeroRotator;
 	}
 
 	/** Network serialization */
@@ -103,9 +108,12 @@ public:
 
 		switch (MoveAction)
 		{
-		case EVRMoveAction::VRMOVEACTION_None: break;
+		case EVRMoveAction::VRMOVEACTION_None: 
+		{
+			break;
+		}
 		case EVRMoveAction::VRMOVEACTION_SetRotation:
-		case EVRMoveAction::VRMOVEACTION_SnapTurn:
+		case EVRMoveAction::VRMOVEACTION_SnapTurn   :
 		{
 			uint16 Yaw;
 
@@ -118,11 +126,14 @@ public:
 			else
 			{
 				Ar << Yaw;
+
 				MoveActionRot.Yaw = FRotator::DecompressAxisFromShort(Yaw);
 			}
 
 			//bOutSuccess &= SerializePackedVector<100, 30>(MoveActionLoc, Ar);
-		}break;
+
+			break;
+		}
 		case EVRMoveAction::VRMOVEACTION_Teleport: // Not replicating rot as Control rot does that already
 		{
 			uint16 Yaw;
@@ -130,37 +141,51 @@ public:
 			if (Ar.IsSaving())
 			{
 				Yaw = FRotator::CompressAxisToShort(MoveActionRot.Yaw);
+
 				Ar << Yaw;
 
 				bool bSkipEncroachment = MoveActionRot.Pitch > 0.0f;
+
 				Ar.SerializeBits(&bSkipEncroachment, 1);
 			}
 			else
 			{
 				Ar << Yaw;
+
 				MoveActionRot.Yaw = FRotator::DecompressAxisFromShort(Yaw);
 
 				bool bSkipEncroachment;
+
 				Ar.SerializeBits(&bSkipEncroachment, 1);
+
 				MoveActionRot.Pitch = bSkipEncroachment ? 1.0f : 0.0f;
 			}
 
 			bOutSuccess &= SerializePackedVector<100, 30>(MoveActionLoc, Ar);
-		}break;
+
+			break;
+		}
 		case EVRMoveAction::VRMOVEACTION_StopAllMovement:
-		{}break;
+		{
+			break;
+		}
 		default: // Everything else
 		{
 			// Defines how much to replicate - only 4 possible values, 0 - 3 so only send 2 bits
 			Ar.SerializeBits(&MoveActionDataReq, 2);
 
 			if (((uint8)MoveActionDataReq & (uint8)EVRMoveActionDataReq::VRMOVEACTIONDATA_LOC) != 0)
+			{
 				bOutSuccess &= SerializePackedVector<100, 30>(MoveActionLoc, Ar);
+			}
 
 			if (((uint8)MoveActionDataReq & (uint8)EVRMoveActionDataReq::VRMOVEACTIONDATA_ROT) != 0)
+			{
 				MoveActionRot.SerializeCompressedShort(Ar);
+			}
 
-		}break;
+			break;
+		}
 		}
 
 		return bOutSuccess;
@@ -168,17 +193,10 @@ public:
 
 	// Declares
 
-	UPROPERTY()
-	EVRMoveAction MoveAction;
-
-	UPROPERTY()
-	EVRMoveActionDataReq MoveActionDataReq;
-
-	UPROPERTY()
-	FVector MoveActionLoc;
-
-	UPROPERTY()
-	FRotator MoveActionRot;
+	UPROPERTY() EVRMoveAction        MoveAction       ;
+	UPROPERTY() EVRMoveActionDataReq MoveActionDataReq;
+	UPROPERTY() FVector              MoveActionLoc    ;
+	UPROPERTY() FRotator             MoveActionRot    ;
 };
 
 template<>
@@ -194,26 +212,32 @@ USTRUCT()
 struct VREXPANSIONPLUGIN_API FVRMoveActionArray
 {
 	GENERATED_USTRUCT_BODY()
+
 public:
-	UPROPERTY()
-		TArray<FVRMoveActionContainer> MoveActions;
+
+	UPROPERTY() TArray<FVRMoveActionContainer> MoveActions;
 
 	void Clear()
 	{
 		MoveActions.Empty();
 	}
+
 	/** Network serialization */
 	// Doing a custom NetSerialize here because this is sent via RPCs and should change on every update
 	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
 	{
 		bOutSuccess = true;
-		uint8 MoveActionCount = (uint8)MoveActions.Num();
+
+		uint8 MoveActionCount = uint8(MoveActions.Num());
+
 		bool bHasAMoveAction = MoveActionCount > 0;
+
 		Ar.SerializeBits(&bHasAMoveAction, 1);
 
 		if (bHasAMoveAction)
 		{
 			bool bHasMoreThanOneMoveAction = MoveActionCount > 1;
+
 			Ar.SerializeBits(&bHasMoreThanOneMoveAction, 1);
 
 			if (Ar.IsSaving())
@@ -222,9 +246,9 @@ public:
 				{
 					Ar << MoveActionCount;
 
-					for (int i = 0; i < MoveActionCount; i++)
+					for (int moveIndex = 0; moveIndex < MoveActionCount; moveIndex++)
 					{
-						bOutSuccess &= MoveActions[i].NetSerialize(Ar, Map, bOutSuccess);
+						bOutSuccess &= MoveActions[moveIndex].NetSerialize(Ar, Map, bOutSuccess);
 					}
 				}
 				else
@@ -241,10 +265,12 @@ public:
 				else
 					MoveActionCount = 1;
 
-				for (int i = 0; i < MoveActionCount; i++)
+				for (int moveIndex = 0; moveIndex < MoveActionCount; moveIndex++)
 				{
 					FVRMoveActionContainer MoveAction;
+
 					bOutSuccess &= MoveAction.NetSerialize(Ar, Map, bOutSuccess);
+
 					MoveActions.Add(MoveAction);
 				}
 			}
@@ -266,14 +292,17 @@ USTRUCT()
 struct VREXPANSIONPLUGIN_API FVRConditionalMoveRep
 {
 	GENERATED_USTRUCT_BODY()
+
 public:
+
 	// Constructor 
 
 	FVRConditionalMoveRep()
 	{
 		CustomVRInputVector = FVector::ZeroVector;
-		RequestedVelocity = FVector::ZeroVector;
+		RequestedVelocity   = FVector::ZeroVector;
 	}
+
 
 	// Functions
 		   
@@ -283,24 +312,24 @@ public:
 	{
 		bOutSuccess = true;
 
-		bool bHasVRinput = !CustomVRInputVector.IsZero();
-		bool bHasRequestedVelocity = !RequestedVelocity.IsZero();
-		bool bHasMoveAction = MoveActionArray.MoveActions.Num() > 0;//MoveAction.MoveAction != EVRMoveAction::VRMOVEACTION_None;
+		bool bHasVRinput           = !CustomVRInputVector.IsZero();
+		bool bHasRequestedVelocity = !RequestedVelocity  .IsZero();
+
+		bool bHasMoveAction        = MoveActionArray.MoveActions.Num() > 0;   //MoveAction.MoveAction != EVRMoveAction::VRMOVEACTION_None;
 
 		bool bHasAnyProperties = bHasVRinput || bHasRequestedVelocity || bHasMoveAction;
+
 		Ar.SerializeBits(&bHasAnyProperties, 1);
 
 		if (bHasAnyProperties)
 		{
-			Ar.SerializeBits(&bHasVRinput, 1);
+			Ar.SerializeBits(&bHasVRinput          , 1);
 			Ar.SerializeBits(&bHasRequestedVelocity, 1);
+
 			//Ar.SerializeBits(&bHasMoveAction, 1);
 
-			if (bHasVRinput)
-				bOutSuccess &= SerializePackedVector<100, 22/*30*/>(CustomVRInputVector, Ar);
-
-			if (bHasRequestedVelocity)
-				bOutSuccess &= SerializePackedVector<100, 22/*30*/>(RequestedVelocity, Ar);
+			if (bHasVRinput          ) bOutSuccess &= SerializePackedVector<100, 22/*30*/>(CustomVRInputVector, Ar);
+			if (bHasRequestedVelocity) bOutSuccess &= SerializePackedVector<100, 22/*30*/>(RequestedVelocity  , Ar);
 
 			//if (bHasMoveAction)
 			MoveActionArray.NetSerialize(Ar, Map, bOutSuccess);
@@ -311,12 +340,10 @@ public:
 
 	// Declares
 
-	UPROPERTY(Transient)
-		FVector CustomVRInputVector;
-	UPROPERTY(Transient)
-		FVRMoveActionArray MoveActionArray;
-	UPROPERTY(Transient)
-		FVector RequestedVelocity;
+	UPROPERTY(Transient) FVector            CustomVRInputVector;
+	UPROPERTY(Transient) FVRMoveActionArray MoveActionArray    ;
+	UPROPERTY(Transient) FVector            RequestedVelocity  ;
+
 	//FVRMoveActionContainer MoveAction;	
 };
 
@@ -333,16 +360,18 @@ USTRUCT()
 struct VREXPANSIONPLUGIN_API FVRConditionalMoveRep2
 {
 	GENERATED_USTRUCT_BODY()
+
 public:
+
 	// Constructor 
 	
 	FVRConditionalMoveRep2()
 	{
-		ClientMovementBase = nullptr;
+		ClientMovementBase = nullptr  ;
 		ClientBaseBoneName = NAME_None;
-		ClientRoll = 0;
-		ClientPitch = 0;
-		ClientYaw = 0;
+		ClientRoll         = 0        ;
+		ClientPitch        = 0        ;
+		ClientYaw          = 0        ;
 	}
 
 	// Functions
@@ -354,13 +383,16 @@ public:
 		bOutSuccess = true;
 
 		bool bRepRollAndPitch = (ClientRoll != 0 || ClientPitch != 0);
+
 		Ar.SerializeBits(&bRepRollAndPitch, 1);
 
 		if (bRepRollAndPitch)
 		{
 			// Reversed the order of these
 			uint32 Rotation32 = (((uint32)ClientPitch) << 16) | ((uint32)ClientYaw);
+
 			Ar.SerializeIntPacked(Rotation32);
+
 			Ar << ClientRoll;
 
 			if (Ar.IsLoading())
@@ -371,11 +403,14 @@ public:
 		else
 		{
 			uint32 Yaw32 = ClientYaw;
+
 			Ar.SerializeIntPacked(Yaw32);
+
 			ClientYaw = (uint16)Yaw32;
 		}
 
 		bool bHasMovementBase = MovementBaseUtility::IsDynamicBase(ClientMovementBase);
+
 		Ar.SerializeBits(&bHasMovementBase, 1);
 
 		if (bHasMovementBase)
@@ -383,6 +418,7 @@ public:
 			Ar << ClientMovementBase;
 
 			bool bValidName = ClientBaseBoneName != NAME_None;
+
 			Ar.SerializeBits(&bValidName, 1);
 
 			// This saves 9 bits on average, we almost never have a valid bone name and default rep goes to 9 bits for hardcoded
@@ -399,28 +435,18 @@ public:
 	void UnpackAndSetINTRotations(uint32 Rotation32)
 	{
 		// Reversed the order of these so it costs less to replicate
-		ClientYaw = (Rotation32 & 65535);
-		ClientPitch = (Rotation32 >> 16);
+		ClientYaw   = (Rotation32 &  65535);
+		ClientPitch = (Rotation32 >> 16   );
 	}
 
 
 	// Declares
 
-	UPROPERTY(Transient)
-		FName ClientBaseBoneName;
-
-	// Moved these here to avoid having to duplicate tons of properties
-	UPROPERTY(Transient)
-		UPrimitiveComponent* ClientMovementBase;
-
-	UPROPERTY(Transient)
-		uint16 ClientPitch;
-
-	UPROPERTY(Transient)
-		uint8 ClientRoll;
-
-	UPROPERTY(Transient)
-		uint16 ClientYaw;
+	UPROPERTY(Transient) FName                ClientBaseBoneName;
+	UPROPERTY(Transient) UPrimitiveComponent* ClientMovementBase;   // Moved these here to avoid having to duplicate tons of properties
+	UPROPERTY(Transient) uint16               ClientPitch       ;
+	UPROPERTY(Transient) uint8                ClientRoll        ;
+	UPROPERTY(Transient) uint16               ClientYaw         ;
 };
 
 template<>
@@ -443,13 +469,14 @@ struct TStructOpsTypeTraits< FVRConditionalMoveRep2 > : public TStructOpsTypeTra
 */
 struct FScopedMeshBoneUpdateOverrideVR
 {
-	FScopedMeshBoneUpdateOverrideVR(USkeletalMeshComponent* Mesh, EKinematicBonesUpdateToPhysics::Type OverrideSetting)
-		: MeshRef(Mesh)
+	FScopedMeshBoneUpdateOverrideVR(USkeletalMeshComponent* Mesh, EKinematicBonesUpdateToPhysics::Type OverrideSetting) : 
+		MeshRef(Mesh)
 	{
 		if (MeshRef)
 		{
 			// Save current state.
 			SavedUpdateSetting = MeshRef->KinematicBonesUpdateType;
+
 			// Override bone update setting.
 			MeshRef->KinematicBonesUpdateType = OverrideSetting;
 		}
@@ -465,48 +492,48 @@ struct FScopedMeshBoneUpdateOverrideVR
 	}
 
 private:
-	USkeletalMeshComponent * MeshRef;
+
+	USkeletalMeshComponent* MeshRef;
+
 	EKinematicBonesUpdateToPhysics::Type SavedUpdateSetting;
 };
 
 class VREXPANSIONPLUGIN_API FSavedMove_VRBaseCharacter : public FSavedMove_Character
 {
-
 public:
+
 	// Constructor 
 	FSavedMove_VRBaseCharacter() : FSavedMove_Character()
 	{
-		VRCapsuleLocation = FVector::ZeroVector;
-		LFDiff = FVector::ZeroVector;
-		VRCapsuleRotation = FRotator::ZeroRotator;
-		VRReplicatedMovementMode = EVRConjoinedMovementModes::C_MOVE_MAX;// _None;
+		VRCapsuleLocation        = FVector::ZeroVector                  ;
+		LFDiff                   = FVector::ZeroVector                  ;
+		VRCapsuleRotation        = FRotator::ZeroRotator                ;
+		VRReplicatedMovementMode = EVRConjoinedMovementModes::C_MOVE_MAX;   // _None;
 	}
 
 	// Functions
 	
 	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* Character, float MaxDelta) const override
 	{
-		FSavedMove_VRBaseCharacter * nMove = (FSavedMove_VRBaseCharacter *)NewMove.Get();
+		FSavedMove_VRBaseCharacter* nMove = (FSavedMove_VRBaseCharacter*)NewMove.Get();
 
-
-		if (!nMove || (VRReplicatedMovementMode != nMove->VRReplicatedMovementMode))
-			return false;
+		if (!nMove || (VRReplicatedMovementMode != nMove->VRReplicatedMovementMode)) return false;
 
 		if (ConditionalValues.MoveActionArray.MoveActions.Num() > 0 || nMove->ConditionalValues.MoveActionArray.MoveActions.Num() > 0)
+		{
 			return false;
+		}
 
-		if (!ConditionalValues.CustomVRInputVector.IsZero() || !nMove->ConditionalValues.CustomVRInputVector.IsZero())
-			return false;
-
-		if (!ConditionalValues.RequestedVelocity.IsZero() || !nMove->ConditionalValues.RequestedVelocity.IsZero())
-			return false;
+		if (!ConditionalValues.CustomVRInputVector.IsZero() || !nMove->ConditionalValues.CustomVRInputVector.IsZero()) return false;
+		if (!ConditionalValues.RequestedVelocity  .IsZero() || !nMove->ConditionalValues.RequestedVelocity  .IsZero()) return false;
 
 		// Hate this but we really can't combine if I am sending a new capsule height
-		if (!FMath::IsNearlyEqual(LFDiff.Z, nMove->LFDiff.Z))
-			return false;
+		if (!FMath::IsNearlyEqual(LFDiff.Z, nMove->LFDiff.Z)) return false;
 
 		if (!LFDiff.IsZero() && !nMove->LFDiff.IsZero() && !FVector::Coincident(LFDiff.GetSafeNormal2D(), nMove->LFDiff.GetSafeNormal2D(), AccelDotThresholdCombine))
+		{
 			return false;
+		}
 
 		return FSavedMove_Character::CanCombineWith(NewMove, Character, MaxDelta);
 	}
@@ -540,18 +567,12 @@ public:
 	
 	virtual bool IsImportantMove(const FSavedMovePtr& LastAckedMove) const override
 	{
-		// Auto important if toggled climbing
-		if (VRReplicatedMovementMode != EVRConjoinedMovementModes::C_MOVE_MAX)//_None)
-			return true;
+		// Auto important if toggled climbing   //_None)
+		if (VRReplicatedMovementMode != EVRConjoinedMovementModes::C_MOVE_MAX) return true;
 
-		if (!ConditionalValues.CustomVRInputVector.IsZero())
-			return true;
-
-		if (!ConditionalValues.RequestedVelocity.IsZero())
-			return true;
-
-		if (ConditionalValues.MoveActionArray.MoveActions.Num() > 0)
-			return true;
+		if (!ConditionalValues.CustomVRInputVector            .IsZero()    ) return true;
+		if (!ConditionalValues.RequestedVelocity              .IsZero()    ) return true;
+		if ( ConditionalValues.MoveActionArray    .MoveActions.Num   () > 0) return true;
 
 		// #TODO: What to do here?
 		// This is debatable, however it will ALWAYS be non zero realistically and only really effects step ups for the most part
@@ -569,12 +590,13 @@ public:
 	   	
 	virtual void SetInitialPosition(ACharacter* C);
 	
+
 	// Declares
 
-	FVRConditionalMoveRep ConditionalValues;
-	FVector LFDiff;
-	FVector VRCapsuleLocation;
-	FRotator VRCapsuleRotation;
+	FVRConditionalMoveRep     ConditionalValues       ;
+	FVector                   LFDiff                  ;
+	FVector                   VRCapsuleLocation       ;
+	FRotator                  VRCapsuleRotation       ;
 	EVRConjoinedMovementModes VRReplicatedMovementMode;
 
 };
@@ -627,34 +649,55 @@ public:
 
 			// Clearing it here instead now, as this way the code can inject it during PerformMovement
 			// Specifically used by the Climbing Step up, so that server rollbacks are supported
-			if (bClearMovementMode)
-				NewMovementMode = EVRConjoinedMovementModes::C_MOVE_MAX;//None;
+			if (bClearMovementMode) NewMovementMode = EVRConjoinedMovementModes::C_MOVE_MAX;//None;
 		}
 	}
 	
 	inline void ApplyVRMotionToVelocity(float deltaTime)
 	{
+		bHadExtremeInput = false;
+
 		if (AdditionalVRInputVector.IsNearlyZero())
 		{
 			LastPreAdditiveVRVelocity = FVector::ZeroVector;
 			return;
 		}
 
-		LastPreAdditiveVRVelocity = (AdditionalVRInputVector) / deltaTime;// Velocity; // Save off pre-additive Velocity for restoration next tick	
+		LastPreAdditiveVRVelocity = (AdditionalVRInputVector) / deltaTime; // Save off pre-additive Velocity for restoration next tick	
+
+		if (LastPreAdditiveVRVelocity.SizeSquared() > FMath::Square(TrackingLossThreshold))
+		{
+			bHadExtremeInput = true;
+			if (bHoldPositionOnTrackingLossThresholdHit)
+			{
+				LastPreAdditiveVRVelocity = FVector::ZeroVector;
+			}
+		}
+
 		Velocity += LastPreAdditiveVRVelocity;
 	}
 	
 	bool CheckForMoveAction();
 
-	virtual void ComputeFloorDist(const FVector& CapsuleLocation, float LineDistance, float SweepDistance, FFindFloorResult& OutFloorResult, float SweepRadius, const FHitResult* DownwardSweepResult = NULL) const override;
+	// Called to check if the server is performing a move action on a non controlled character
+	// If so then we just run the logic right away as it can't be inlined and won't be replicated
+	void CheckServerAuthedMoveAction();
 
-	bool DoMASetRotation(FVRMoveActionContainer& MoveAction);
+	virtual void ComputeFloorDist
+	(
+		const FVector&          CapsuleLocation           , 
+		      float             LineDistance              , 
+		      float             SweepDistance             , 
+		      FFindFloorResult& OutFloorResult            , 
+		      float             SweepRadius               , 
+		const FHitResult*       DownwardSweepResult = NULL
+	) 
+	const override;
 
-	bool DoMASnapTurn(FVRMoveActionContainer& MoveAction);
-
+	bool DoMASetRotation    (FVRMoveActionContainer& MoveAction);
+	bool DoMASnapTurn       (FVRMoveActionContainer& MoveAction);
 	bool DoMAStopAllMovement(FVRMoveActionContainer& MoveAction);
-
-	bool DoMATeleport(FVRMoveActionContainer& MoveAction);
+	bool DoMATeleport       (FVRMoveActionContainer& MoveAction);
 	
 	void EndPushBackNotification();
 	
@@ -672,7 +715,7 @@ public:
 	* Call this to convert the current movement mode to a Conjoined one for reference
 	*
 	* Custom Movement Mode is currently limited to 0 - 8, the index's 0 and 1 are currently used up for the plugin movement modes.
-	* So setting it to 0 or 1 would be Climbing, and LowGrav respectivly, this leaves 2-8 as open index's for use.
+	* So setting it to 0 or 1 would be Climbing, and LowGrav respectively, this leaves 2-8 as open index's for use.
 	* For a total of 6 Custom movement modes past the currently implemented plugin ones.
 	*/
 	UFUNCTION(BlueprintPure, Category = "VRMovement")
@@ -690,7 +733,7 @@ public:
 	// Adding seated transition
 	void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	
-	// Perform a custom moveaction that you define, will call the OnCustomMoveActionPerformed event in the character when processed so you can run your own logic
+	// Perform a custom move action that you define, will call the OnCustomMoveActionPerformed event in the character when processed so you can run your own logic
 	// Be sure to set the minimum data replication requirements for your move action in order to save on replication.
 	// Move actions are currently limited to 1 per frame.
 	UFUNCTION(BlueprintCallable, Category = "VRMovement")
@@ -699,11 +742,11 @@ public:
 	// Perform a rotation set in line with the move actions system
 	// This node specifically sets the FACING direction to a value, where your HMD is pointed
 	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_SetRotation(float NewYaw);
+		void PerformMoveAction_SetRotation(float NewYaw, bool bFlagGripTeleport = false);
 
 	// Perform a snap turn in line with the move action system
 	UFUNCTION(BlueprintCallable, Category = "VRMovement")
-		void PerformMoveAction_SnapTurn(float SnapTurnDeltaYaw);
+		void PerformMoveAction_SnapTurn(float SnapTurnDeltaYaw, bool bFlagGripTeleport = false);
 
 	// Perform StopAllMovementImmediately in line with the move action system
 	UFUNCTION(BlueprintCallable, Category = "VRMovement")
@@ -715,17 +758,38 @@ public:
 	
 	virtual void PerformMovement(float DeltaSeconds) override;
 
-	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
-	
-	virtual void PhysCustom_Climbing(float deltaTime, int32 Iterations);
-	
-	virtual void PhysCustom_LowGrav(float deltaTime, int32 Iterations);
+	virtual void PhysCustom         (float deltaTime, int32 Iterations) override;
+	virtual void PhysCustom_Climbing(float deltaTime, int32 Iterations)         ;
+	virtual void PhysCustom_LowGrav (float deltaTime, int32 Iterations)         ;
 
 	//virtual void ReplicateMoveToServer(float DeltaTime, const FVector& NewAcceleration) override;
 
 	inline void RestorePreAdditiveVRMotionVelocity()
 	{
-		Velocity -= LastPreAdditiveVRVelocity;
+		if (!LastPreAdditiveVRVelocity.IsNearlyZero())
+		{
+			if (bHadExtremeInput)
+			{
+				// Just zero out the velocity here
+				Velocity = FVector::ZeroVector;
+			}
+			else
+			{
+				// This doesn't work with input in the opposing direction
+				/*FVector ProjectedVelocity = Velocity.ProjectOnToNormal(LastPreAdditiveVRVelocity.GetSafeNormal());
+				float VelSq = ProjectedVelocity.SizeSquared();
+				float AddSq = LastPreAdditiveVRVelocity.SizeSquared();
+
+				if (VelSq > AddSq || ProjectedVelocity.Equals(LastPreAdditiveVRVelocity, 0.1f))
+				{
+					// Subtract velocity if we still relatively retain it in the normalized direction
+					Velocity -= LastPreAdditiveVRVelocity;
+				}*/
+
+				Velocity -= LastPreAdditiveVRVelocity;
+			}
+		}
+
 		LastPreAdditiveVRVelocity = FVector::ZeroVector;
 	}
 	   	
@@ -741,9 +805,19 @@ public:
 		{
 			//FHitResult AHit;
 			MoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false);
+			//SafeMoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false, AHit);
 		}
-		//SafeMoveUpdatedComponent(-AdditionalVRInputVector, UpdatedComponent->GetComponentQuat(), false, AHit);
 	}
+
+	// Any movement above this value we will consider as have been a tracking jump and null out the movement in the character
+	// Raise this value higher if players are noticing freezing when moving quickly.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement", meta = (ClampMin = "0.0", UIMin = "0"))
+		float TrackingLossThreshold;
+	
+	// If we hit the tracking loss threshold then rewind position instead of running to the new location
+	// Will force the HMD to stay in its original spot prior to the tracking jump
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
+		bool bHoldPositionOnTrackingLossThresholdHit;
 
 	FVector RoundDirectMovement(FVector InMovement) const;
 	
@@ -778,19 +852,19 @@ public:
 	virtual void SmoothClientPosition(float DeltaSeconds) override;
 
 	/** Update mesh location based on interpolated values. */
-	void SmoothClientPosition_UpdateVRVisuals();
+	        void SmoothClientPosition_UpdateVRVisuals();
 
 	// Skip updates with rotational differences
 	virtual void SmoothCorrection(const FVector& OldLocation, const FQuat& OldRotation, const FVector& NewLocation, const FQuat& NewRotation) override;
-	
-	void StartPushBackNotification(FHitResult HitResult);
+
+	        void StartPushBackNotification(FHitResult HitResult);
 	
 	//virtual void SendClientAdjustment() override;
 
 	// Overriding this to run the seated logic
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
 	
-	void UpdateFromCompressedFlags(uint8 Flags) override;
+	        void UpdateFromCompressedFlags(uint8 Flags) override;
 
 	virtual bool VerifyClientTimeStamp(float TimeStamp, FNetworkPredictionData_Server_Character & ServerData) override;
 	   
@@ -815,7 +889,7 @@ public:
 
 	/** Replicate position correction to client, associated with a timestamped servermove.  Client will replay subsequent moves after applying adjustment.  */
 	UFUNCTION(unreliable, client)
-	virtual void ClientAdjustPosition(float TimeStamp, FVector NewLoc, FVector NewVel, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
+	virtual void ClientAdjustPosition               (float TimeStamp, FVector NewLoc, FVector NewVel, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
 	virtual void ClientAdjustPosition_Implementation(float TimeStamp, FVector NewLoc, FVector NewVel, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override
 	{
 		//this->CustomVRInputVector = FVector::ZeroVector;
@@ -825,7 +899,7 @@ public:
 
 	/* Bandwidth saving version, when velocity is zeroed */
 	UFUNCTION(unreliable, client)
-	virtual void ClientVeryShortAdjustPosition(float TimeStamp, FVector NewLoc, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
+	virtual void ClientVeryShortAdjustPosition               (float TimeStamp, FVector NewLoc, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
 	virtual void ClientVeryShortAdjustPosition_Implementation(float TimeStamp, FVector NewLoc, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override
 	{
 		//this->CustomVRInputVector = FVector::ZeroVector;
@@ -834,6 +908,8 @@ public:
 	}
 
 	// Declares
+
+	bool bHadExtremeInput;
 
 	bool bApplyAdditionalVRInputVectorAsNegative;
 	
@@ -848,6 +924,8 @@ public:
 
 	bool bIsInPushBack;
 
+	bool bNotifyTeleported;
+
 	// If true will run the control rotation in the CMC instead of in the player controller
 	// This puts the player rotation into the scoped movement (perf savings) and also ensures it is properly rotated prior to movement
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
@@ -856,16 +934,14 @@ public:
 	bool bWasInPushBack;
 
 	FVector AdditionalVRInputVector;
-
-	FVector CustomVRInputVector;
+	FVector CustomVRInputVector    ;
 
 	// Default movement mode to switch to post climb ended, only used if SetDefaultPostClimbMovementOnStepUp is true
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|Climbing")
 		EVRConjoinedMovementModes DefaultPostClimbMovement;
 
-	FVector LastPreAdditiveVRVelocity;
-
-	FVRMoveActionArray MoveActionArray;
+	FVector            LastPreAdditiveVRVelocity;
+	FVRMoveActionArray MoveActionArray          ;
 
 	// Called when a valid climbing step up movement is found, if bound to the default auto step up is not performed to let custom step up logic happen instead.
 	UPROPERTY(BlueprintAssignable, Category = "VRMovement")
@@ -911,7 +987,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement")
 		float VREdgeRejectDistance;
 	   
-	// If true then low grav will ignore the default physics volume fluid friction, useful if you have a mix of low grav and normal movement
+	// If true then low gravity will ignore the default physics volume fluid friction, useful if you have a mix of low gravity and normal movement
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VRMovement|LowGrav")
 		bool VRLowGravIgnoresDefaultFluidFriction;
 

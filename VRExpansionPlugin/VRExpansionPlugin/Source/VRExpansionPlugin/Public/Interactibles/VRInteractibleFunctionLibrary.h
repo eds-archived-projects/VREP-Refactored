@@ -128,7 +128,7 @@ public:
 	
 	static float GetDeltaAngleFromTransforms(EVRInteractibleAxis RotAxis, FTransform & InitialRelativeTransform, FTransform &CurrentRelativeTransform)
 	{
-		return GetDeltaAngle(RotAxis, (InitialRelativeTransform.GetRotation().Inverse() * CurrentRelativeTransform.GetRotation()).GetNormalized());
+		return GetDeltaAngle(RotAxis, (CurrentRelativeTransform.GetRelativeTransform(InitialRelativeTransform).GetRotation()).GetNormalized());
 	}
 
 	static float GetDeltaAngle(EVRInteractibleAxis RotAxis, FQuat DeltaQuat)
@@ -279,7 +279,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "VRInteractibleFunctions", meta = (bIgnoreSelf = "true"))
 	static float Interactible_GetThresholdSnappedValue(float ValueToSnap, float SnapIncrement, float SnapThreshold)
 	{
-		if (FMath::Fmod(ValueToSnap, SnapIncrement) <= FMath::Min(SnapIncrement, SnapThreshold))
+		if (SnapIncrement > 0.f && FMath::Fmod(ValueToSnap, SnapIncrement) <= FMath::Min(SnapIncrement, SnapThreshold))
 		{
 			return FMath::GridSnap(ValueToSnap, SnapIncrement);
 		}

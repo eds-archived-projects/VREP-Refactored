@@ -233,8 +233,8 @@ void UVRMountComponent::OnGripRelease_Implementation(UGripMotionControllerCompon
 
 void UVRMountComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
 
-void UVRMountComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRMountComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRMountComponent::OnSecondaryGrip_Implementation(UGripMotionControllerComponent * GripOwningController, USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRMountComponent::OnSecondaryGripRelease_Implementation(UGripMotionControllerComponent * GripOwningController, USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
 
 void UVRMountComponent::OnSecondaryUsed_Implementation() {}
 

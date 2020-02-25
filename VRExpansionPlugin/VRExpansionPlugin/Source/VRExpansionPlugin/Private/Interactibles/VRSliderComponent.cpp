@@ -99,7 +99,7 @@ void UVRSliderComponent::CheckSliderProgress()
 	else if ((LastSliderProgressState != CurrentSliderProgress) || bHitEventThreshold)
 	{
 		if ((!bSliderUsesSnapPoints && (CurrentSliderProgress == 1.0f || CurrentSliderProgress == 0.0f)) ||
-			(bSliderUsesSnapPoints && FMath::IsNearlyEqual(FMath::Fmod(CurrentSliderProgress, SnapIncrement), 0.0f))
+			(bSliderUsesSnapPoints && SnapIncrement > 0.f && FMath::IsNearlyEqual(FMath::Fmod(CurrentSliderProgress, SnapIncrement), 0.0f))
 			)
 		{
 			// I am working with exacts here because of the clamping, it should actually work with no precision issues
@@ -349,8 +349,8 @@ void UVRSliderComponent::OnChildGripRelease_Implementation(UGripMotionController
 void UVRSliderComponent::OnEndUsed_Implementation() {}
 void UVRSliderComponent::OnEndSecondaryUsed_Implementation() {}
 void UVRSliderComponent::OnInput_Implementation(FKey Key, EInputEvent KeyEvent) {}
-void UVRSliderComponent::OnSecondaryGrip_Implementation(USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
-void UVRSliderComponent::OnSecondaryGripRelease_Implementation(USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRSliderComponent::OnSecondaryGrip_Implementation(UGripMotionControllerComponent * GripOwningController, USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
+void UVRSliderComponent::OnSecondaryGripRelease_Implementation(UGripMotionControllerComponent * GripOwningController, USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation) {}
 void UVRSliderComponent::OnSecondaryUsed_Implementation() {}
 void UVRSliderComponent::OnUsed_Implementation() {}
 
@@ -622,7 +622,14 @@ float UVRSliderComponent::GetCurrentSliderProgress(FVector CurLocation, bool bUs
 	}
 
 	// Should need the clamp normally, but if someone is manually setting locations it could go out of bounds
-	return FMath::Clamp(FVector::Dist(-MinSlideDistance, CurLocation) / FVector::Dist(-MinSlideDistance, MaxSlideDistance), 0.0f, 1.0f);
+	float Progress = FMath::Clamp(FVector::Dist(-MinSlideDistance, CurLocation) / FVector::Dist(-MinSlideDistance, MaxSlideDistance), 0.0f, 1.0f);
+
+	if (bSliderUsesSnapPoints && SnapThreshold < SnapIncrement)
+	{
+		Progress = FMath::GridSnap(Progress, SnapIncrement);
+	}
+
+	return Progress;
 }
 
 void UVRSliderComponent::GetLerpedKey(float &ClosestKey, float DeltaTime)

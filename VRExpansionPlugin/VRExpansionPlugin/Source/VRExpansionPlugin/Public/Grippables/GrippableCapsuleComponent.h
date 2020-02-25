@@ -25,7 +25,7 @@
 /**
 *
 */
-UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent), ClassGroup = (VRExpansionPlugin))
+UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent, ChildCanTick), ClassGroup = (VRExpansionPlugin))
 class VREXPANSIONPLUGIN_API UGrippableCapsuleComponent : 
 	// Parent
 	public UCapsuleComponent, 
@@ -171,13 +171,13 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
 		void OnGripRelease(UGripMotionControllerComponent* ReleasingController, const FBPActorGripInformation& GripInformation, bool bWasSocketed = false);
 
-	// Event triggered on the interfaced object when secondary gripped.
+	// Event triggered on the interfaced object when secondary gripped
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void OnSecondaryGrip(USceneComponent* SecondaryGripComponent, const FBPActorGripInformation& GripInformation);
+		void OnSecondaryGrip(UGripMotionControllerComponent * GripOwningController, USceneComponent * SecondaryGripComponent, const FBPActorGripInformation & GripInformation);
 
-	// Event triggered on the interfaced object when secondary grip is released.
+	// Event triggered on the interfaced object when secondary grip is released
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")
-		void OnSecondaryGripRelease(USceneComponent* ReleasingSecondaryGripComponent, const FBPActorGripInformation& GripInformation);
+		void OnSecondaryGripRelease(UGripMotionControllerComponent * GripOwningController, USceneComponent * ReleasingSecondaryGripComponent, const FBPActorGripInformation & GripInformation);
 
 	// Event triggered each tick on the interfaced object when gripped, can be used for custom movement or grip based logic.
 	UFUNCTION(BlueprintNativeEvent, Category = "VRGripInterface")

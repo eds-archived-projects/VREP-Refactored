@@ -8,11 +8,10 @@
 
 
 // IWVR
-#include "FTransform_NetQuantize.h"
 #include "FBPAdvGripSettings.h"
 #include "FBPAdvGripPhysicsSettings.h"
-#include "FBPAdvSecondaryGripSettings.h"
 #include "FBPSecondaryGripInfo.h"
+#include "FTransform_NetQuantize.h"
 
 // UHeader Tool
 #include "FBPActorGripInformation.generated.h"
